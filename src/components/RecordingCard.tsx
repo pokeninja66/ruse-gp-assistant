@@ -12,9 +12,12 @@ export interface RecordingCardProps {
   audioUrl?: string
   appointmentId?: string
   patientName?: string
+  isAnalyzing?: boolean
   onDelete?: () => void
   onRetry?: () => void
 }
+
+import { Link } from '@tanstack/react-router'
 
 export function RecordingCard({
   name,
@@ -26,6 +29,7 @@ export function RecordingCard({
   audioUrl,
   appointmentId,
   patientName,
+  isAnalyzing,
   onDelete,
   onRetry,
 }: RecordingCardProps) {
@@ -55,22 +59,31 @@ export function RecordingCard({
         />
       )}
 
-      {/* Play button */}
-      <button
-        onClick={togglePlay}
-        disabled={!src}
-        className="shrink-0 w-11 h-11 rounded-full flex items-center justify-center bg-gradient-to-br from-violet-600/80 to-cyan-600/80 hover:from-violet-500 hover:to-cyan-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-violet-500/20 hover:shadow-violet-500/40 hover:scale-105 active:scale-95"
-      >
-        {playing ? (
-          <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+      {/* Play button or Loading */}
+      {isAnalyzing ? (
+        <div className="shrink-0 w-11 h-11 rounded-full flex items-center justify-center bg-violet-500/10 border border-violet-500/20">
+          <svg className="animate-spin w-5 h-5 text-violet-400" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
           </svg>
-        ) : (
-          <svg className="w-4 h-4 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M8 5v14l11-7L8 5z" />
-          </svg>
-        )}
-      </button>
+        </div>
+      ) : (
+        <button
+          onClick={togglePlay}
+          disabled={!src}
+          className="shrink-0 w-11 h-11 rounded-full flex items-center justify-center bg-gradient-to-br from-violet-600/80 to-cyan-600/80 hover:from-violet-500 hover:to-cyan-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-lg shadow-violet-500/20 hover:shadow-violet-500/40 hover:scale-105 active:scale-95"
+        >
+          {playing ? (
+            <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7L8 5z" />
+            </svg>
+          )}
+        </button>
+      )}
 
       {/* Static waveform */}
       <div className="shrink-0 flex items-end gap-px h-8">
@@ -104,7 +117,13 @@ export function RecordingCard({
 
       {/* Badges + actions */}
       <div className="flex items-center gap-2 shrink-0">
-        {appointmentId && onRetry && (
+        {isAnalyzing && (
+          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-400 border border-violet-500/20 flex items-center gap-1.5 animate-pulse">
+            Analyzing...
+          </span>
+        )}
+        
+        {appointmentId && !isAnalyzing && onRetry && (
           <button
             onClick={onRetry}
             className="p-1.5 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-cyan-500/10 transition-all"
@@ -114,6 +133,16 @@ export function RecordingCard({
               <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
             </svg>
           </button>
+        )}
+
+        {appointmentId && !isAnalyzing && (
+          <Link
+            to="/session/results/$appointmentId"
+            params={{ appointmentId }}
+            className="px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-white/5 hover:bg-white/10 transition-colors border border-white/10"
+          >
+            View Notes
+          </Link>
         )}
         {localOnly && (
           <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20">

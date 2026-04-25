@@ -24,6 +24,7 @@ function PatientDetailPage() {
   const [loading, setLoading] = React.useState(true)
   const [startingSession, setStartingSession] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const [analyzingApptId, setAnalyzingApptId] = React.useState<string | null>(null)
 
   // Medication Modal State
   const [showMedModal, setShowMedModal] = React.useState(false)
@@ -416,11 +417,13 @@ function PatientDetailPage() {
                     createdAt={rec.created_at}
                     publicUrl={rec.publicUrl}
                     appointmentId={rec.apptId}
+                    isAnalyzing={analyzingApptId === rec.apptId}
                     onRetry={async () => {
+                      setAnalyzingApptId(rec.apptId)
                       const res = await doRetry({ data: { appointmentId: rec.apptId } })
+                      setAnalyzingApptId(null)
                       if (res.error) alert(res.message)
                       else {
-                        alert('Analysis complete!')
                         load()
                       }
                     }}
