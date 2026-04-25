@@ -206,7 +206,7 @@ export const getPatientFn = createServerFn({ method: 'GET' })
     let allRecordings: any[] = []
     if (apptIds.length > 0) {
       // @ts-ignore
-      const { data: recs } = await admin
+      const { data: recs } = await (admin as any)
         .from('recordings')
         .select('*')
         .in('appointment_id', apptIds)
@@ -334,7 +334,7 @@ export const addMedicationFn = createServerFn({ method: 'POST' })
   )
   .handler(async ({ data }) => {
     const admin = getSupabaseAdminClient()
-    const { error } = await admin.from('patient_medications').insert({
+    const { error } = await (admin as any).from('patient_medications').insert({
       patient_id: data.patientId,
       drug_name: data.drugName,
       atc_code: data.atcCode || null,

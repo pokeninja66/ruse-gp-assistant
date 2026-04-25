@@ -425,6 +425,7 @@ function PatientDetailPage() {
                       if (res.error) alert(res.message)
                       else {
                         load()
+                        navigate({ to: '/session/results/$appointmentId', params: { appointmentId: rec.apptId } })
                       }
                     }}
                   />

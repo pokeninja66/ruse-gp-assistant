@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import * as React from 'react'
 import { useAudioRecorder } from '../../hooks/useAudioRecorder'
@@ -270,6 +270,7 @@ function RecorderWidget({
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 function RecordingsPage() {
+  const navigate = useNavigate()
   const { user } = Route.useRouteContext()
   const doList = useServerFn(listRecordingsFn)
   const doListPatients = useServerFn(listPatientsFn)
@@ -335,7 +336,7 @@ function RecordingsPage() {
       if (res.error) {
         alert(`Analysis failed: ${res.message}`)
       } else {
-        alert('Analysis complete!')
+        navigate({ to: '/session/results/$appointmentId', params: { appointmentId } })
       }
     } catch (err: any) {
       alert(`Error: ${err.message}`)
@@ -406,6 +407,7 @@ function RecordingsPage() {
                   publicUrl={rec.publicUrl}
                   appointmentId={rec.appointment_id}
                   patientName={rec.patient_name}
+                  isAnalyzing={retryingId === rec.id}
                   onDelete={() => handleDeleteCloud(rec.id, rec.storage_path)}
                   onRetry={rec.appointment_id ? () => handleRetry(rec.id, rec.appointment_id!) : undefined}
                 />
