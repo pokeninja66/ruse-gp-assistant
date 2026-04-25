@@ -1,5 +1,7 @@
 import { createServerFn } from '@tanstack/react-start'
 import { getSupabaseServerClient } from './supabase'
+import { getSupabaseAdminClient } from './supabaseAdmin'
+import type { RecordingMeta } from './recordings'
 
 export interface Patient {
   id: string
@@ -165,6 +167,7 @@ export interface PatientAppointment {
   started_at?: string
   ended_at?: string
   created_at: string
+  recordings?: RecordingMeta[]
 }
 
 export interface PatientDetail extends Patient {
@@ -196,7 +199,35 @@ export const getPatientFn = createServerFn({ method: 'GET' })
       return { error: true, message: patientError.message }
     }
 
-    return { error: false, message: 'Success', patient }
+    // Fetch recordings for these appointments separately to avoid PostgREST relationship errors
+    const admin = getSupabaseAdminClient()
+    const apptIds = (patient.appointments || []).map((a: any) => a.id)
+    
+    let allRecordings: any[] = []
+    if (apptIds.length > 0) {
+      // @ts-ignore
+      const { data: recs } = await admin
+        .from('recordings')
+        .select('*')
+        .in('appointment_id', apptIds)
+      
+      allRecordings = recs || []
+    }
+
+    const enrichedPatient = {
+      ...patient,
+      appointments: (patient.appointments || []).map((appt: any) => ({
+        ...appt,
+        recordings: allRecordings
+          .filter(rec => rec.appointment_id === appt.id)
+          .map(rec => ({
+            ...rec,
+            publicUrl: admin.storage.from('recordings').getPublicUrl(rec.storage_path).data.publicUrl
+          }))
+      }))
+    }
+
+    return { error: false, message: 'Success', patient: enrichedPatient }
   })
 
 export const quickAddDevPatientFn = createServerFn({ method: 'POST' })
@@ -295,4 +326,26 @@ export const quickAddDevPatientFn = createServerFn({ method: 'POST' })
     ])
 
     return { error: false, message: 'Dev patient created successfully' }
+  })
+
+export const addMedicationFn = createServerFn({ method: 'POST' })
+  .inputValidator(
+    (d: { patientId: string; drugName: string; atcCode?: string; dosage?: string; frequency?: string }) => d,
+  )
+  .handler(async ({ data }) => {
+    const admin = getSupabaseAdminClient()
+    const { error } = await admin.from('patient_medications').insert({
+      patient_id: data.patientId,
+      drug_name: data.drugName,
+      atc_code: data.atcCode || null,
+      dosage: data.dosage || null,
+      frequency: data.frequency || null,
+      status: 'active',
+    })
+
+    if (error) {
+      console.error('[patients] add medication error:', error)
+      return { error: true, message: error.message }
+    }
+    return { error: false, message: 'Success' }
   })

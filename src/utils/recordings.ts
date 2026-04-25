@@ -128,20 +128,47 @@ export const listRecordingsFn = createServerFn({ method: 'GET' }).handler(
 
     const admin = getSupabaseAdminClient()
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: rows, error } = await (admin as any)
       .from('recordings')
-      .select('*, appointments(patient_id, patients(first_name, last_name))')
+      .select('*')
       .eq('user_id', userData.user.id)
       .order('created_at', { ascending: false })
 
-    if (error || !rows) return []
+    if (error || !rows) {
+      console.error('[recordings] list error:', error)
+      return []
+    }
 
-    return (rows as DbRow[]).map((row) => ({
-      ...row,
-      publicUrl: row.storage_path ? getPublicUrl(row.storage_path) : undefined,
-      patient_name: row.appointments?.patients ? `${row.appointments.patients.first_name} ${row.appointments.patients.last_name}` : undefined
-    }))
+    const typedRows = rows as any[]
+    
+    // Manually fetch appointments and patients to bypass PostgREST relationship cache issues
+    const appointmentIds = typedRows.map(r => r.appointment_id).filter(Boolean)
+    let appointmentsLookup: Record<string, any> = {}
+    
+    if (appointmentIds.length > 0) {
+      const { data: appts } = await (admin as any)
+        .from('appointments')
+        .select('id, patient_id, patients(first_name, last_name)')
+        .in('id', appointmentIds)
+        
+      if (appts) {
+        appointmentsLookup = appts.reduce((acc: any, appt: any) => {
+          acc[appt.id] = appt
+          return acc
+        }, {})
+      }
+    }
+
+    return typedRows.map((row) => {
+      const appt = row.appointment_id ? appointmentsLookup[row.appointment_id] : null
+      const patientName = appt?.patients ? `${appt.patients.first_name} ${appt.patients.last_name}` : undefined
+      
+      return {
+        ...row,
+        publicUrl: row.storage_path ? getPublicUrl(row.storage_path) : undefined,
+        patient_name: patientName
+      }
+    })
   },
 )
 
