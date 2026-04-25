@@ -18,8 +18,10 @@ import { Route as AuthedRecordingsRouteImport } from './routes/_authed/recording
 import { Route as AuthedPostsRouteImport } from './routes/_authed/posts'
 import { Route as AuthedPostsIndexRouteImport } from './routes/_authed/posts.index'
 import { Route as AuthedPatientsIndexRouteImport } from './routes/_authed/patients.index'
+import { Route as AuthedSessionAppointmentIdRouteImport } from './routes/_authed/session.$appointmentId'
 import { Route as AuthedPostsPostIdRouteImport } from './routes/_authed/posts.$postId'
 import { Route as AuthedPatientsPatientIdRouteImport } from './routes/_authed/patients.$patientId'
+import { Route as AuthedSessionResultsAppointmentIdRouteImport } from './routes/_authed/session.results.$appointmentId'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -65,6 +67,12 @@ const AuthedPatientsIndexRoute = AuthedPatientsIndexRouteImport.update({
   path: '/patients/',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedSessionAppointmentIdRoute =
+  AuthedSessionAppointmentIdRouteImport.update({
+    id: '/session/$appointmentId',
+    path: '/session/$appointmentId',
+    getParentRoute: () => AuthedRoute,
+  } as any)
 const AuthedPostsPostIdRoute = AuthedPostsPostIdRouteImport.update({
   id: '/$postId',
   path: '/$postId',
@@ -75,6 +83,12 @@ const AuthedPatientsPatientIdRoute = AuthedPatientsPatientIdRouteImport.update({
   path: '/patients/$patientId',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedSessionResultsAppointmentIdRoute =
+  AuthedSessionResultsAppointmentIdRouteImport.update({
+    id: '/session/results/$appointmentId',
+    path: '/session/results/$appointmentId',
+    getParentRoute: () => AuthedRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -85,8 +99,10 @@ export interface FileRoutesByFullPath {
   '/recordings': typeof AuthedRecordingsRoute
   '/patients/$patientId': typeof AuthedPatientsPatientIdRoute
   '/posts/$postId': typeof AuthedPostsPostIdRoute
+  '/session/$appointmentId': typeof AuthedSessionAppointmentIdRoute
   '/patients/': typeof AuthedPatientsIndexRoute
   '/posts/': typeof AuthedPostsIndexRoute
+  '/session/results/$appointmentId': typeof AuthedSessionResultsAppointmentIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -96,8 +112,10 @@ export interface FileRoutesByTo {
   '/recordings': typeof AuthedRecordingsRoute
   '/patients/$patientId': typeof AuthedPatientsPatientIdRoute
   '/posts/$postId': typeof AuthedPostsPostIdRoute
+  '/session/$appointmentId': typeof AuthedSessionAppointmentIdRoute
   '/patients': typeof AuthedPatientsIndexRoute
   '/posts': typeof AuthedPostsIndexRoute
+  '/session/results/$appointmentId': typeof AuthedSessionResultsAppointmentIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -110,8 +128,10 @@ export interface FileRoutesById {
   '/_authed/recordings': typeof AuthedRecordingsRoute
   '/_authed/patients/$patientId': typeof AuthedPatientsPatientIdRoute
   '/_authed/posts/$postId': typeof AuthedPostsPostIdRoute
+  '/_authed/session/$appointmentId': typeof AuthedSessionAppointmentIdRoute
   '/_authed/patients/': typeof AuthedPatientsIndexRoute
   '/_authed/posts/': typeof AuthedPostsIndexRoute
+  '/_authed/session/results/$appointmentId': typeof AuthedSessionResultsAppointmentIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -124,8 +144,10 @@ export interface FileRouteTypes {
     | '/recordings'
     | '/patients/$patientId'
     | '/posts/$postId'
+    | '/session/$appointmentId'
     | '/patients/'
     | '/posts/'
+    | '/session/results/$appointmentId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -135,8 +157,10 @@ export interface FileRouteTypes {
     | '/recordings'
     | '/patients/$patientId'
     | '/posts/$postId'
+    | '/session/$appointmentId'
     | '/patients'
     | '/posts'
+    | '/session/results/$appointmentId'
   id:
     | '__root__'
     | '/'
@@ -148,8 +172,10 @@ export interface FileRouteTypes {
     | '/_authed/recordings'
     | '/_authed/patients/$patientId'
     | '/_authed/posts/$postId'
+    | '/_authed/session/$appointmentId'
     | '/_authed/patients/'
     | '/_authed/posts/'
+    | '/_authed/session/results/$appointmentId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -225,6 +251,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedPatientsIndexRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/session/$appointmentId': {
+      id: '/_authed/session/$appointmentId'
+      path: '/session/$appointmentId'
+      fullPath: '/session/$appointmentId'
+      preLoaderRoute: typeof AuthedSessionAppointmentIdRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/posts/$postId': {
       id: '/_authed/posts/$postId'
       path: '/$postId'
@@ -237,6 +270,13 @@ declare module '@tanstack/react-router' {
       path: '/patients/$patientId'
       fullPath: '/patients/$patientId'
       preLoaderRoute: typeof AuthedPatientsPatientIdRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/session/results/$appointmentId': {
+      id: '/_authed/session/results/$appointmentId'
+      path: '/session/results/$appointmentId'
+      fullPath: '/session/results/$appointmentId'
+      preLoaderRoute: typeof AuthedSessionResultsAppointmentIdRouteImport
       parentRoute: typeof AuthedRoute
     }
   }
@@ -260,14 +300,19 @@ interface AuthedRouteChildren {
   AuthedPostsRoute: typeof AuthedPostsRouteWithChildren
   AuthedRecordingsRoute: typeof AuthedRecordingsRoute
   AuthedPatientsPatientIdRoute: typeof AuthedPatientsPatientIdRoute
+  AuthedSessionAppointmentIdRoute: typeof AuthedSessionAppointmentIdRoute
   AuthedPatientsIndexRoute: typeof AuthedPatientsIndexRoute
+  AuthedSessionResultsAppointmentIdRoute: typeof AuthedSessionResultsAppointmentIdRoute
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedPostsRoute: AuthedPostsRouteWithChildren,
   AuthedRecordingsRoute: AuthedRecordingsRoute,
   AuthedPatientsPatientIdRoute: AuthedPatientsPatientIdRoute,
+  AuthedSessionAppointmentIdRoute: AuthedSessionAppointmentIdRoute,
   AuthedPatientsIndexRoute: AuthedPatientsIndexRoute,
+  AuthedSessionResultsAppointmentIdRoute:
+    AuthedSessionResultsAppointmentIdRoute,
 }
 
 const AuthedRouteWithChildren =

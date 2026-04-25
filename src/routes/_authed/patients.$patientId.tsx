@@ -1,7 +1,8 @@
-import { createFileRoute, Link, useParams } from '@tanstack/react-router'
+import { createFileRoute, Link, useParams, useNavigate } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import * as React from 'react'
 import { getPatientFn, type PatientDetail } from '../../utils/patients'
+import { createAppointmentFn } from '../../utils/appointments'
 
 export const Route = createFileRoute('/_authed/patients/$patientId')({
   component: PatientDetailPage,
@@ -9,10 +10,13 @@ export const Route = createFileRoute('/_authed/patients/$patientId')({
 
 function PatientDetailPage() {
   const { patientId } = Route.useParams()
+  const navigate = useNavigate()
   const doGetPatient = useServerFn(getPatientFn)
+  const doCreateAppointment = useServerFn(createAppointmentFn)
   
   const [patient, setPatient] = React.useState<PatientDetail | null>(null)
   const [loading, setLoading] = React.useState(true)
+  const [startingSession, setStartingSession] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
@@ -110,8 +114,21 @@ function PatientDetailPage() {
              <button className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white text-sm font-medium transition-colors border border-white/10">
                Edit Patient
              </button>
-             <button className="px-4 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 text-white text-sm font-medium transition-all shadow-lg shadow-violet-500/20">
-               Start Session
+             <button
+               disabled={startingSession}
+               onClick={async () => {
+                 setStartingSession(true)
+                 const res = await doCreateAppointment({ data: { patientId } })
+                 if (!res.error && res.appointmentId) {
+                   navigate({ to: '/session/$appointmentId', params: { appointmentId: res.appointmentId } })
+                 } else {
+                   alert(res.message || 'Failed to start session')
+                   setStartingSession(false)
+                 }
+               }}
+               className="px-4 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 text-white text-sm font-medium transition-all shadow-lg shadow-violet-500/20 disabled:opacity-50"
+             >
+               {startingSession ? 'Starting...' : 'Start Session'}
              </button>
           </div>
         </div>
@@ -288,9 +305,13 @@ function PatientDetailPage() {
                     }`}>
                       {appt.status}
                     </span>
-                    <button className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-medium text-white transition-colors border border-white/10">
+                    <Link
+                      to="/session/results/$appointmentId"
+                      params={{ appointmentId: appt.id }}
+                      className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-medium text-white transition-colors border border-white/10"
+                    >
                       Details
-                    </button>
+                    </Link>
                   </div>
                 </div>
               ))}

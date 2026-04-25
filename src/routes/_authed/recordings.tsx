@@ -15,6 +15,9 @@ import {
   uploadRecordingFn,
   type RecordingMeta,
 } from '../../utils/recordings'
+import { listPatientsFn, type Patient } from '../../utils/patients'
+import { createAppointmentFn } from '../../utils/appointments'
+import { transcribeAudioFn, analyzeConsultationFn, retryAnalysisFn } from '../../utils/ai'
 
 export const Route = createFileRoute('/_authed/recordings')({
   component: RecordingsPage,
@@ -65,7 +68,10 @@ function RecordingCard({
   localOnly,
   publicUrl,
   audioUrl,
+  appointmentId,
+  patientName,
   onDelete,
+  onRetry,
 }: {
   name: string
   duration: number
@@ -74,7 +80,10 @@ function RecordingCard({
   localOnly?: boolean
   publicUrl?: string
   audioUrl?: string
+  appointmentId?: string
+  patientName?: string
   onDelete: () => void
+  onRetry?: () => void
 }) {
   const [playing, setPlaying] = React.useState(false)
   const audioRef = React.useRef<HTMLAudioElement | null>(null)
@@ -136,14 +145,32 @@ function RecordingCard({
 
       {/* Info */}
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-white truncate">{name}</p>
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-medium text-white truncate">{name}</p>
+          {patientName && (
+            <span className="shrink-0 text-[10px] px-2 py-0.5 rounded-md bg-violet-500/10 text-violet-400 border border-violet-500/20">
+              Patient: {patientName}
+            </span>
+          )}
+        </div>
         <p className="text-xs text-gray-500 mt-0.5">
           {timeAgo(createdAt)} · {formatDuration(duration)} · {formatSize(size)}
         </p>
       </div>
 
-      {/* Badges + delete */}
+      {/* Badges + actions */}
       <div className="flex items-center gap-2 shrink-0">
+        {appointmentId && onRetry && (
+          <button
+            onClick={onRetry}
+            className="p-1.5 rounded-lg text-gray-500 hover:text-cyan-400 hover:bg-cyan-500/10 transition-all"
+            title="Retry Analysis"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+            </svg>
+          </button>
+        )}
         {localOnly && (
           <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20">
             Local
@@ -166,17 +193,24 @@ function RecordingCard({
 // ── Recorder widget ───────────────────────────────────────────────────────────
 
 function RecorderWidget({
+  patients,
   onSaved,
 }: {
+  patients: Patient[]
   onSaved: () => void
 }) {
   const { status, durationSeconds, audioBlob, audioUrl, start, stop, pause, resume, reset, error } =
     useAudioRecorder()
   const doUpload = useServerFn(uploadRecordingFn)
+  const doCreateAppointment = useServerFn(createAppointmentFn)
+  const doTranscribe = useServerFn(transcribeAudioFn)
+  const doAnalyze = useServerFn(analyzeConsultationFn)
 
   const [saving, setSaving] = React.useState(false)
+  const [processingState, setProcessingState] = React.useState<string | null>(null)
   const [saveError, setSaveError] = React.useState<string | null>(null)
   const [recordingName, setRecordingName] = React.useState('')
+  const [selectedPatientId, setSelectedPatientId] = React.useState<string>('')
 
   const isRecording = status === 'recording'
   const isPaused = status === 'paused'
@@ -189,7 +223,18 @@ function RecorderWidget({
     const name = recordingName.trim() || `Recording ${new Date().toLocaleString()}`
 
     try {
+      setProcessingState('Uploading...')
       const base64 = await blobToBase64(audioBlob)
+      
+      let appointmentId: string | undefined = undefined
+
+      if (selectedPatientId) {
+        setProcessingState('Creating Session...')
+        const aptRes = await doCreateAppointment({ data: { patientId: selectedPatientId } })
+        if (aptRes.error) throw new Error(aptRes.message)
+        appointmentId = aptRes.appointmentId
+      }
+
       const result = await doUpload({
         data: {
           base64,
@@ -197,36 +242,58 @@ function RecorderWidget({
           name,
           duration: durationSeconds,
           size: audioBlob.size,
+          appointmentId
         },
       })
 
       if (result.error) {
-        // Show the actual Supabase error and fall back to local storage
         console.error('[recordings] Upload failed:', result.message)
         await saveLocalRecording(audioBlob, name, durationSeconds)
         setSaveError(`Saved locally (cloud error: ${result.message})`)
         setSaving(false)
+        setProcessingState(null)
         onSaved()
         return
       }
+
+      // If a patient is selected, run the AI pipeline
+      if (appointmentId && selectedPatientId) {
+        setProcessingState('Transcribing Audio...')
+        const transRes = await doTranscribe({
+          data: { base64, mimeType: audioBlob.type }
+        })
+        if (!transRes.error && transRes.transcript) {
+          setProcessingState('AI Analyzing...')
+          await doAnalyze({
+            data: {
+              appointmentId,
+              patientId: selectedPatientId,
+              transcript: transRes.transcript
+            }
+          })
+        }
+      }
+
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error'
       console.error('[recordings] Unexpected error:', err)
       try {
         await saveLocalRecording(audioBlob, name, durationSeconds)
         setSaveError(`Saved locally (error: ${msg})`)
-        setSaving(false)
-        onSaved()
       } catch {
         setSaveError(`Could not save recording: ${msg}`)
-        setSaving(false)
       }
+      setSaving(false)
+      setProcessingState(null)
+      onSaved()
       return
     }
 
     setSaving(false)
+    setProcessingState(null)
     reset()
     setRecordingName('')
+    setSelectedPatientId('')
     onSaved()
   }
 
@@ -318,13 +385,25 @@ function RecorderWidget({
                 {audioUrl && (
                   <audio controls src={audioUrl} className="w-full h-9 rounded-lg" />
                 )}
-                <input
-                  type="text"
-                  placeholder="Name this recording…"
-                  value={recordingName}
-                  onChange={(e) => setRecordingName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-gray-800 border border-white/10 text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/60 transition"
-                />
+                <div className="flex flex-col gap-2">
+                  <input
+                    type="text"
+                    placeholder="Name this recording…"
+                    value={recordingName}
+                    onChange={(e) => setRecordingName(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-gray-800 border border-white/10 text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/60 transition"
+                  />
+                  <select
+                    value={selectedPatientId}
+                    onChange={(e) => setSelectedPatientId(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-gray-800 border border-white/10 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/60 transition appearance-none"
+                  >
+                    <option value="">Unassigned Recording (Standalone)</option>
+                    {patients.map(p => (
+                      <option key={p.id} value={p.id}>{p.first_name} {p.last_name}</option>
+                    ))}
+                  </select>
+                </div>
                 {saveError && <p className="text-sm text-red-400">{saveError}</p>}
                 <div className="flex gap-2">
                   <button
@@ -337,9 +416,9 @@ function RecorderWidget({
                     id="save-recording-btn"
                     onClick={handleSave}
                     disabled={saving}
-                    className="flex-1 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 text-white text-sm font-medium transition-all disabled:opacity-50"
+                    className="flex-1 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 text-white text-sm font-medium transition-all shadow-lg shadow-violet-500/20 disabled:opacity-50"
                   >
-                    {saving ? 'Saving…' : 'Save'}
+                    {saving ? (processingState || 'Saving…') : (selectedPatientId ? 'Save & Analyze' : 'Save')}
                   </button>
                 </div>
               </>
@@ -356,21 +435,27 @@ function RecorderWidget({
 function RecordingsPage() {
   const { user } = Route.useRouteContext()
   const doList = useServerFn(listRecordingsFn)
+  const doListPatients = useServerFn(listPatientsFn)
   const doDelete = useServerFn(deleteRecordingFn)
+  const doRetry = useServerFn(retryAnalysisFn)
 
   const [cloudRecs, setCloudRecs] = React.useState<RecordingMeta[]>([])
   const [localRecs, setLocalRecs] = React.useState<LocalRecording[]>([])
   const [localUrls, setLocalUrls] = React.useState<Record<string, string>>({})
+  const [patients, setPatients] = React.useState<Patient[]>([])
   const [loading, setLoading] = React.useState(true)
+  const [retryingId, setRetryingId] = React.useState<string | null>(null)
 
   const loadAll = React.useCallback(async () => {
     setLoading(true)
-    const [cloud, local] = await Promise.all([
+    const [cloud, local, pats] = await Promise.all([
       doList().catch(() => [] as RecordingMeta[]),
       listLocalRecordings().catch(() => [] as LocalRecording[]),
+      doListPatients().catch(() => [] as Patient[]),
     ])
     setCloudRecs(cloud)
     setLocalRecs(local)
+    setPatients(pats)
 
     // Create object URLs for local blobs
     const urls: Record<string, string> = {}
@@ -379,7 +464,7 @@ function RecordingsPage() {
     })
     setLocalUrls(urls)
     setLoading(false)
-  }, [doList])
+  }, [doList, doListPatients])
 
   React.useEffect(() => {
     loadAll()
@@ -406,6 +491,23 @@ function RecordingsPage() {
     })
   }
 
+  const handleRetry = async (recordingId: string, appointmentId: string) => {
+    setRetryingId(recordingId)
+    try {
+      const res = await doRetry({ data: { appointmentId } })
+      if (res.error) {
+        alert(`Analysis failed: ${res.message}`)
+      } else {
+        alert('Analysis complete!')
+      }
+    } catch (err: any) {
+      alert(`Error: ${err.message}`)
+    } finally {
+      setRetryingId(null)
+      loadAll()
+    }
+  }
+
   const totalCount = cloudRecs.length + localRecs.length
 
   return (
@@ -426,7 +528,7 @@ function RecordingsPage() {
         </div>
 
         {/* Recorder */}
-        <RecorderWidget onSaved={loadAll} />
+        <RecorderWidget patients={patients} onSaved={loadAll} />
 
         {/* List */}
         <div>
@@ -465,7 +567,10 @@ function RecordingsPage() {
                   createdAt={rec.created_at}
                   localOnly={false}
                   publicUrl={rec.publicUrl}
+                  appointmentId={rec.appointment_id}
+                  patientName={rec.patient_name}
                   onDelete={() => handleDeleteCloud(rec.id, rec.storage_path)}
+                  onRetry={rec.appointment_id ? () => handleRetry(rec.id, rec.appointment_id!) : undefined}
                 />
               ))}
               {localRecs.map((rec) => (

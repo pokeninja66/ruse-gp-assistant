@@ -13,6 +13,8 @@ export interface RecordingMeta {
   local_only: boolean
   created_at: string
   publicUrl?: string
+  appointment_id?: string
+  patient_name?: string
 }
 
 type DbRow = {
@@ -24,6 +26,14 @@ type DbRow = {
   local_only: boolean
   created_at: string
   user_id: string
+  appointment_id?: string
+  appointments?: {
+    patient_id: string
+    patients: {
+      first_name: string
+      last_name: string
+    }
+  }
 }
 
 function getPublicUrl(path: string): string {
@@ -42,6 +52,7 @@ export const uploadRecordingFn = createServerFn({ method: 'POST' })
       name: string
       duration: number
       size: number
+      appointmentId?: string
     }) => d,
   )
   .handler(
@@ -74,17 +85,23 @@ export const uploadRecordingFn = createServerFn({ method: 'POST' })
         return { error: true, message: `Storage: ${uploadError.message}` }
       }
 
+      const insertPayload: any = {
+        user_id: userId,
+        name: data.name,
+        size: data.size,
+        duration: data.duration,
+        storage_path: storagePath,
+        local_only: false,
+      }
+      
+      if (data.appointmentId) {
+        insertPayload.appointment_id = data.appointmentId
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: dbError, data: row } = await (admin as any)
         .from('recordings')
-        .insert({
-          user_id: userId,
-          name: data.name,
-          size: data.size,
-          duration: data.duration,
-          storage_path: storagePath,
-          local_only: false,
-        })
+        .insert(insertPayload)
         .select()
         .single()
 
@@ -114,7 +131,7 @@ export const listRecordingsFn = createServerFn({ method: 'GET' }).handler(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: rows, error } = await (admin as any)
       .from('recordings')
-      .select('*')
+      .select('*, appointments(patient_id, patients(first_name, last_name))')
       .eq('user_id', userData.user.id)
       .order('created_at', { ascending: false })
 
@@ -123,6 +140,7 @@ export const listRecordingsFn = createServerFn({ method: 'GET' }).handler(
     return (rows as DbRow[]).map((row) => ({
       ...row,
       publicUrl: row.storage_path ? getPublicUrl(row.storage_path) : undefined,
+      patient_name: row.appointments?.patients ? `${row.appointments.patients.first_name} ${row.appointments.patients.last_name}` : undefined
     }))
   },
 )
