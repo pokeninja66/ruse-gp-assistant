@@ -16,8 +16,10 @@ import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthedRecordingsRouteImport } from './routes/_authed/recordings'
 import { Route as AuthedPostsRouteImport } from './routes/_authed/posts'
+import { Route as AuthedPatientsRouteImport } from './routes/_authed/patients'
 import { Route as AuthedPostsIndexRouteImport } from './routes/_authed/posts.index'
 import { Route as AuthedPostsPostIdRouteImport } from './routes/_authed/posts.$postId'
+import { Route as AuthedPatientsPatientIdRouteImport } from './routes/_authed/patients.$patientId'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -53,6 +55,11 @@ const AuthedPostsRoute = AuthedPostsRouteImport.update({
   path: '/posts',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedPatientsRoute = AuthedPatientsRouteImport.update({
+  id: '/patients',
+  path: '/patients',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedPostsIndexRoute = AuthedPostsIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -63,14 +70,21 @@ const AuthedPostsPostIdRoute = AuthedPostsPostIdRouteImport.update({
   path: '/$postId',
   getParentRoute: () => AuthedPostsRoute,
 } as any)
+const AuthedPatientsPatientIdRoute = AuthedPatientsPatientIdRouteImport.update({
+  id: '/$patientId',
+  path: '/$patientId',
+  getParentRoute: () => AuthedPatientsRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/logout': typeof LogoutRoute
   '/signup': typeof SignupRoute
+  '/patients': typeof AuthedPatientsRouteWithChildren
   '/posts': typeof AuthedPostsRouteWithChildren
   '/recordings': typeof AuthedRecordingsRoute
+  '/patients/$patientId': typeof AuthedPatientsPatientIdRoute
   '/posts/$postId': typeof AuthedPostsPostIdRoute
   '/posts/': typeof AuthedPostsIndexRoute
 }
@@ -79,7 +93,9 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/logout': typeof LogoutRoute
   '/signup': typeof SignupRoute
+  '/patients': typeof AuthedPatientsRouteWithChildren
   '/recordings': typeof AuthedRecordingsRoute
+  '/patients/$patientId': typeof AuthedPatientsPatientIdRoute
   '/posts/$postId': typeof AuthedPostsPostIdRoute
   '/posts': typeof AuthedPostsIndexRoute
 }
@@ -90,8 +106,10 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/logout': typeof LogoutRoute
   '/signup': typeof SignupRoute
+  '/_authed/patients': typeof AuthedPatientsRouteWithChildren
   '/_authed/posts': typeof AuthedPostsRouteWithChildren
   '/_authed/recordings': typeof AuthedRecordingsRoute
+  '/_authed/patients/$patientId': typeof AuthedPatientsPatientIdRoute
   '/_authed/posts/$postId': typeof AuthedPostsPostIdRoute
   '/_authed/posts/': typeof AuthedPostsIndexRoute
 }
@@ -102,8 +120,10 @@ export interface FileRouteTypes {
     | '/login'
     | '/logout'
     | '/signup'
+    | '/patients'
     | '/posts'
     | '/recordings'
+    | '/patients/$patientId'
     | '/posts/$postId'
     | '/posts/'
   fileRoutesByTo: FileRoutesByTo
@@ -112,7 +132,9 @@ export interface FileRouteTypes {
     | '/login'
     | '/logout'
     | '/signup'
+    | '/patients'
     | '/recordings'
+    | '/patients/$patientId'
     | '/posts/$postId'
     | '/posts'
   id:
@@ -122,8 +144,10 @@ export interface FileRouteTypes {
     | '/login'
     | '/logout'
     | '/signup'
+    | '/_authed/patients'
     | '/_authed/posts'
     | '/_authed/recordings'
+    | '/_authed/patients/$patientId'
     | '/_authed/posts/$postId'
     | '/_authed/posts/'
   fileRoutesById: FileRoutesById
@@ -187,6 +211,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedPostsRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/patients': {
+      id: '/_authed/patients'
+      path: '/patients'
+      fullPath: '/patients'
+      preLoaderRoute: typeof AuthedPatientsRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/posts/': {
       id: '/_authed/posts/'
       path: '/'
@@ -201,8 +232,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedPostsPostIdRouteImport
       parentRoute: typeof AuthedPostsRoute
     }
+    '/_authed/patients/$patientId': {
+      id: '/_authed/patients/$patientId'
+      path: '/$patientId'
+      fullPath: '/patients/$patientId'
+      preLoaderRoute: typeof AuthedPatientsPatientIdRouteImport
+      parentRoute: typeof AuthedPatientsRoute
+    }
   }
 }
+
+interface AuthedPatientsRouteChildren {
+  AuthedPatientsPatientIdRoute: typeof AuthedPatientsPatientIdRoute
+}
+
+const AuthedPatientsRouteChildren: AuthedPatientsRouteChildren = {
+  AuthedPatientsPatientIdRoute: AuthedPatientsPatientIdRoute,
+}
+
+const AuthedPatientsRouteWithChildren = AuthedPatientsRoute._addFileChildren(
+  AuthedPatientsRouteChildren,
+)
 
 interface AuthedPostsRouteChildren {
   AuthedPostsPostIdRoute: typeof AuthedPostsPostIdRoute
@@ -219,11 +269,13 @@ const AuthedPostsRouteWithChildren = AuthedPostsRoute._addFileChildren(
 )
 
 interface AuthedRouteChildren {
+  AuthedPatientsRoute: typeof AuthedPatientsRouteWithChildren
   AuthedPostsRoute: typeof AuthedPostsRouteWithChildren
   AuthedRecordingsRoute: typeof AuthedRecordingsRoute
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
+  AuthedPatientsRoute: AuthedPatientsRouteWithChildren,
   AuthedPostsRoute: AuthedPostsRouteWithChildren,
   AuthedRecordingsRoute: AuthedRecordingsRoute,
 }
