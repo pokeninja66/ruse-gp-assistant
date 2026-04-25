@@ -91,3 +91,24 @@ export const getAppointmentResultsFn = createServerFn({ method: 'GET' })
       }
     }
   })
+
+export const deleteAppointmentFn = createServerFn({ method: 'POST' })
+  .inputValidator((d: { id: string }) => d)
+  .handler(async ({ data }): Promise<{ error: boolean; message: string }> => {
+    const supabase = getSupabaseServerClient()
+    const { data: userData, error: userError } = await supabase.auth.getUser()
+    if (userError || !userData.user) return { error: true, message: 'Unauthorized' }
+
+    const { error } = await supabase
+      .from('appointments')
+      .delete()
+      .eq('id', data.id)
+      .eq('doctor_id', userData.user.id)
+
+    if (error) {
+      return { error: true, message: error.message }
+    }
+
+    return { error: false, message: 'Appointment deleted' }
+  })
+

@@ -6,6 +6,8 @@ import { createAppointmentFn } from '../../utils/appointments'
 import { RecordingCard } from '../../components/RecordingCard'
 import { retryAnalysisFn } from '../../utils/ai'
 import { searchDrugsFn, type DrugCatalogueEntry } from '../../utils/drugs'
+import { deleteAppointmentFn } from '../../utils/appointments'
+import { deleteRecordingFn } from '../../utils/recordings'
 
 export const Route = createFileRoute('/_authed/patients/$patientId')({
   component: PatientDetailPage,
@@ -19,6 +21,8 @@ function PatientDetailPage() {
   const doRetry = useServerFn(retryAnalysisFn)
   const doAddMed = useServerFn(addMedicationFn)
   const doSearchDrugs = useServerFn(searchDrugsFn)
+  const doDeleteAppt = useServerFn(deleteAppointmentFn)
+  const doDeleteRec = useServerFn(deleteRecordingFn)
   
   const [patient, setPatient] = React.useState<PatientDetail | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -83,6 +87,20 @@ function PatientDetailPage() {
     }
     setLoading(false)
   }, [patientId, doGetPatient])
+
+  const handleDeleteRecording = async (id: string, storagePath?: string) => {
+    if (!window.confirm('Are you sure you want to delete this recording?')) return
+    const res = await doDeleteRec({ data: { id, storagePath } })
+    if (res.error) alert(res.message)
+    else load()
+  }
+
+  const handleDeleteAppointment = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this medical record? This will also delete any linked recordings and analysis.')) return
+    const res = await doDeleteAppt({ data: { id } })
+    if (res.error) alert(res.message)
+    else load()
+  }
 
   React.useEffect(() => {
     load()
@@ -371,6 +389,15 @@ function PatientDetailPage() {
                     }`}>
                       {appt.status}
                     </span>
+                    <button 
+                      onClick={() => handleDeleteAppointment(appt.id)}
+                      className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-all"
+                      title="Delete Record"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                      </svg>
+                    </button>
                     <Link
                       to="/session/results/$appointmentId"
                       params={{ appointmentId: appt.id }}
@@ -418,6 +445,7 @@ function PatientDetailPage() {
                     publicUrl={rec.publicUrl}
                     appointmentId={rec.apptId}
                     isAnalyzing={analyzingApptId === rec.apptId}
+                    onDelete={() => handleDeleteRecording(rec.id, rec.storage_path)}
                     onRetry={async () => {
                       setAnalyzingApptId(rec.apptId)
                       const res = await doRetry({ data: { appointmentId: rec.apptId } })

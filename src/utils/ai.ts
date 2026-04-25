@@ -78,13 +78,15 @@ Known Allergies: ${patient.patient_allergies.map((a: any) => a.substance).join('
 Known Conditions: ${patient.patient_conditions.map((c: any) => c.condition_name).join(', ') || 'None'}
 Current Medications: ${patient.patient_medications.map((m: any) => m.drug_name).join(', ') || 'None'}
 
-Extract medical entities (symptoms, diagnoses, drug suggestions) and provide a single primary recommendation.
+Extract medical entities (symptoms, diagnoses, drug suggestions) and provide a primary recommendation.
+DIAGNOSIS POLICY: If a clear diagnosis isn't provided in the transcript, you MUST still provide a "guess diagnosis" based on the symptoms. In this case, prefix the diagnosis value with "[GUESS] " or "[PROVISIONAL] ". Never leave the diagnosis list empty if symptoms are present.
+
 Output your analysis EXACTLY matching the following JSON schema:
 {
   "entities": [
     {
       "entity_type": "symptom" | "allergy" | "medication" | "condition" | "diagnosis" | "drug_suggestion",
-      "value": "Name of the entity",
+      "value": "Name of the entity (e.g. [GUESS] Common Cold)",
       "negated": false,
       "attributes": { "severity": "mild/moderate/severe", "duration": "e.g. 2 days" }
     }

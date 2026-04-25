@@ -314,11 +314,13 @@ function RecordingsPage() {
   }, [])
 
   const handleDeleteCloud = async (id: string, storagePath?: string) => {
+    if (!window.confirm('Are you sure you want to delete this cloud recording?')) return
     await doDelete({ data: { id, storagePath } })
     setCloudRecs((prev) => prev.filter((r) => r.id !== id))
   }
 
   const handleDeleteLocal = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this local recording? It will be gone forever.')) return
     if (localUrls[id]) URL.revokeObjectURL(localUrls[id])
     await deleteLocalRecording(id)
     setLocalRecs((prev) => prev.filter((r) => r.id !== id))
