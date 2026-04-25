@@ -5,11 +5,22 @@ import OpenAI from 'openai'
 // Initialize OpenAI client inside the handlers or here if we have env
 // We'll create it dynamically so we can guarantee access to process.env
 function getOpenAIClient() {
-  const apiKey = process.env.VITE_OPENAI_API_KEY || process.env.OPENAI_API_KEY
+  // Check multiple sources for the API key to support local dev (Vite), 
+  // build-time envs, and runtime envs (Cloudflare/Nitro).
+  const apiKey = 
+    // @ts-ignore
+    import.meta.env?.VITE_OPENAI_API_KEY || 
+    process.env?.VITE_OPENAI_API_KEY || 
+    process.env?.OPENAI_API_KEY ||
+    // @ts-ignore
+    globalThis?.VITE_OPENAI_API_KEY ||
+    // @ts-ignore
+    globalThis?.OPENAI_API_KEY
+
   if (!apiKey) {
-    throw new Error('Missing OpenAI API Key in environment variables')
+    throw new Error('Missing OpenAI API Key in environment variables (VITE_OPENAI_API_KEY or OPENAI_API_KEY)')
   }
-  return new OpenAI({ apiKey })
+  return new OpenAI({ apiKey, dangerouslyAllowBrowser: false })
 }
 
 export const transcribeAudioFn = createServerFn({ method: 'POST' })

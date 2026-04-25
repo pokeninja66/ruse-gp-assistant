@@ -11,13 +11,13 @@ let _adminClient: ReturnType<typeof createClient> | null = null
 export function getSupabaseAdminClient() {
   if (_adminClient) return _adminClient
 
-  const url = import.meta.env.VITE_SUPABASE_URL as string
-  const serviceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY as string
+  const url = (import.meta.env.VITE_SUPABASE_URL || process.env.VITE_SUPABASE_URL) as string
+  const serviceRoleKey = (import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY) as string
 
   if (!url) throw new Error('Missing VITE_SUPABASE_URL')
   if (!serviceRoleKey) {
     throw new Error(
-      'Missing VITE_SUPABASE_SERVICE_ROLE_KEY in .env — add it from Supabase Dashboard → Settings → API',
+      'Missing VITE_SUPABASE_SERVICE_ROLE_KEY environment variable',
     )
   }
 
