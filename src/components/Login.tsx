@@ -1,35 +1,37 @@
-import { useRouter } from '@tanstack/react-router'
+import { useRouter, useSearch } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
+import * as React from 'react'
 import { useMutation } from '../hooks/useMutation'
 import { loginFn } from '../routes/_authed'
-import { signupFn } from '../routes/signup'
 import { Auth } from './Auth'
+
+type LoginResult = { error: boolean; message: string } | undefined
 
 export function Login() {
   const router = useRouter()
+  // The _authed guard may have stored the intended destination
+  const search = useSearch({ strict: false }) as { redirect?: string }
 
   const loginMutation = useMutation({
-    fn: loginFn,
+    fn: useServerFn(loginFn),
     onSuccess: async (ctx) => {
-      if (!ctx.data?.error) {
+      const result = ctx.data as LoginResult
+      if (!result?.error) {
         await router.invalidate()
-        router.navigate({ to: '/' })
-        return
+        router.navigate({ to: search.redirect || '/recordings' })
       }
     },
   })
 
-  const signupMutation = useMutation({
-    fn: useServerFn(signupFn),
-  })
+  const result = loginMutation.data as LoginResult
 
   return (
     <Auth
-      actionText="Login"
+      mode="login"
+      actionText="Sign In"
       status={loginMutation.status}
       onSubmit={(e) => {
         const formData = new FormData(e.target as HTMLFormElement)
-
         loginMutation.mutate({
           data: {
             email: formData.get('email') as string,
@@ -38,35 +40,13 @@ export function Login() {
         })
       }}
       afterSubmit={
-        loginMutation.data ? (
-          <>
-            <div className="text-red-400">{loginMutation.data.message}</div>
-            {loginMutation.data.error &&
-            loginMutation.data.message === 'Invalid login credentials' ? (
-              <div>
-                <button
-                  className="text-blue-500"
-                  onClick={(e) => {
-                    const formData = new FormData(
-                      (e.target as HTMLButtonElement).form!,
-                    )
-
-                    signupMutation.mutate({
-                      data: {
-                        email: formData.get('email') as string,
-                        password: formData.get('password') as string,
-                      },
-                    })
-                  }}
-                  type="button"
-                >
-                  Sign up instead?
-                </button>
-              </div>
-            ) : null}
-          </>
+        result?.error ? (
+          <div className="mt-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+            {result.message}
+          </div>
         ) : null
       }
     />
   )
 }
+

@@ -13,7 +13,7 @@ export function getSupabaseServerClient() {
             value,
           }))
         },
-        setAll(cookies) {
+        setAll(cookies: Array<{ name: string; value: string; [key: string]: unknown }>) {
           cookies.forEach((cookie) => {
             setCookie(cookie.name, cookie.value)
           })
