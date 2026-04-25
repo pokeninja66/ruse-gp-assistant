@@ -12,10 +12,16 @@ export const loginFn = createServerFn({ method: 'POST' })
     })
 
     if (error) {
-      return {
-        error: true,
-        message: error.message,
+      // Email confirmation was previously required — account exists but is unconfirmed.
+      // Since confirmation is now disabled, signUp will return a session for the existing user.
+      if (error.message === 'Email not confirmed') {
+        const { error: signUpError } = await supabase.auth.signUp({
+          email: data.email,
+          password: data.password,
+        })
+        if (!signUpError) return undefined // session is now set via cookies
       }
+      return { error: true, message: error.message }
     }
   })
 
