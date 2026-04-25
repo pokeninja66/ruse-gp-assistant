@@ -16,8 +16,8 @@ import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthedRecordingsRouteImport } from './routes/_authed/recordings'
 import { Route as AuthedPostsRouteImport } from './routes/_authed/posts'
-import { Route as AuthedPatientsRouteImport } from './routes/_authed/patients'
 import { Route as AuthedPostsIndexRouteImport } from './routes/_authed/posts.index'
+import { Route as AuthedPatientsIndexRouteImport } from './routes/_authed/patients.index'
 import { Route as AuthedPostsPostIdRouteImport } from './routes/_authed/posts.$postId'
 import { Route as AuthedPatientsPatientIdRouteImport } from './routes/_authed/patients.$patientId'
 
@@ -55,15 +55,15 @@ const AuthedPostsRoute = AuthedPostsRouteImport.update({
   path: '/posts',
   getParentRoute: () => AuthedRoute,
 } as any)
-const AuthedPatientsRoute = AuthedPatientsRouteImport.update({
-  id: '/patients',
-  path: '/patients',
-  getParentRoute: () => AuthedRoute,
-} as any)
 const AuthedPostsIndexRoute = AuthedPostsIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AuthedPostsRoute,
+} as any)
+const AuthedPatientsIndexRoute = AuthedPatientsIndexRouteImport.update({
+  id: '/patients/',
+  path: '/patients/',
+  getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedPostsPostIdRoute = AuthedPostsPostIdRouteImport.update({
   id: '/$postId',
@@ -71,9 +71,9 @@ const AuthedPostsPostIdRoute = AuthedPostsPostIdRouteImport.update({
   getParentRoute: () => AuthedPostsRoute,
 } as any)
 const AuthedPatientsPatientIdRoute = AuthedPatientsPatientIdRouteImport.update({
-  id: '/$patientId',
-  path: '/$patientId',
-  getParentRoute: () => AuthedPatientsRoute,
+  id: '/patients/$patientId',
+  path: '/patients/$patientId',
+  getParentRoute: () => AuthedRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -81,11 +81,11 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/logout': typeof LogoutRoute
   '/signup': typeof SignupRoute
-  '/patients': typeof AuthedPatientsRouteWithChildren
   '/posts': typeof AuthedPostsRouteWithChildren
   '/recordings': typeof AuthedRecordingsRoute
   '/patients/$patientId': typeof AuthedPatientsPatientIdRoute
   '/posts/$postId': typeof AuthedPostsPostIdRoute
+  '/patients/': typeof AuthedPatientsIndexRoute
   '/posts/': typeof AuthedPostsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -93,10 +93,10 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/logout': typeof LogoutRoute
   '/signup': typeof SignupRoute
-  '/patients': typeof AuthedPatientsRouteWithChildren
   '/recordings': typeof AuthedRecordingsRoute
   '/patients/$patientId': typeof AuthedPatientsPatientIdRoute
   '/posts/$postId': typeof AuthedPostsPostIdRoute
+  '/patients': typeof AuthedPatientsIndexRoute
   '/posts': typeof AuthedPostsIndexRoute
 }
 export interface FileRoutesById {
@@ -106,11 +106,11 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/logout': typeof LogoutRoute
   '/signup': typeof SignupRoute
-  '/_authed/patients': typeof AuthedPatientsRouteWithChildren
   '/_authed/posts': typeof AuthedPostsRouteWithChildren
   '/_authed/recordings': typeof AuthedRecordingsRoute
   '/_authed/patients/$patientId': typeof AuthedPatientsPatientIdRoute
   '/_authed/posts/$postId': typeof AuthedPostsPostIdRoute
+  '/_authed/patients/': typeof AuthedPatientsIndexRoute
   '/_authed/posts/': typeof AuthedPostsIndexRoute
 }
 export interface FileRouteTypes {
@@ -120,11 +120,11 @@ export interface FileRouteTypes {
     | '/login'
     | '/logout'
     | '/signup'
-    | '/patients'
     | '/posts'
     | '/recordings'
     | '/patients/$patientId'
     | '/posts/$postId'
+    | '/patients/'
     | '/posts/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -132,10 +132,10 @@ export interface FileRouteTypes {
     | '/login'
     | '/logout'
     | '/signup'
-    | '/patients'
     | '/recordings'
     | '/patients/$patientId'
     | '/posts/$postId'
+    | '/patients'
     | '/posts'
   id:
     | '__root__'
@@ -144,11 +144,11 @@ export interface FileRouteTypes {
     | '/login'
     | '/logout'
     | '/signup'
-    | '/_authed/patients'
     | '/_authed/posts'
     | '/_authed/recordings'
     | '/_authed/patients/$patientId'
     | '/_authed/posts/$postId'
+    | '/_authed/patients/'
     | '/_authed/posts/'
   fileRoutesById: FileRoutesById
 }
@@ -211,19 +211,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedPostsRouteImport
       parentRoute: typeof AuthedRoute
     }
-    '/_authed/patients': {
-      id: '/_authed/patients'
-      path: '/patients'
-      fullPath: '/patients'
-      preLoaderRoute: typeof AuthedPatientsRouteImport
-      parentRoute: typeof AuthedRoute
-    }
     '/_authed/posts/': {
       id: '/_authed/posts/'
       path: '/'
       fullPath: '/posts/'
       preLoaderRoute: typeof AuthedPostsIndexRouteImport
       parentRoute: typeof AuthedPostsRoute
+    }
+    '/_authed/patients/': {
+      id: '/_authed/patients/'
+      path: '/patients'
+      fullPath: '/patients/'
+      preLoaderRoute: typeof AuthedPatientsIndexRouteImport
+      parentRoute: typeof AuthedRoute
     }
     '/_authed/posts/$postId': {
       id: '/_authed/posts/$postId'
@@ -234,25 +234,13 @@ declare module '@tanstack/react-router' {
     }
     '/_authed/patients/$patientId': {
       id: '/_authed/patients/$patientId'
-      path: '/$patientId'
+      path: '/patients/$patientId'
       fullPath: '/patients/$patientId'
       preLoaderRoute: typeof AuthedPatientsPatientIdRouteImport
-      parentRoute: typeof AuthedPatientsRoute
+      parentRoute: typeof AuthedRoute
     }
   }
 }
-
-interface AuthedPatientsRouteChildren {
-  AuthedPatientsPatientIdRoute: typeof AuthedPatientsPatientIdRoute
-}
-
-const AuthedPatientsRouteChildren: AuthedPatientsRouteChildren = {
-  AuthedPatientsPatientIdRoute: AuthedPatientsPatientIdRoute,
-}
-
-const AuthedPatientsRouteWithChildren = AuthedPatientsRoute._addFileChildren(
-  AuthedPatientsRouteChildren,
-)
 
 interface AuthedPostsRouteChildren {
   AuthedPostsPostIdRoute: typeof AuthedPostsPostIdRoute
@@ -269,15 +257,17 @@ const AuthedPostsRouteWithChildren = AuthedPostsRoute._addFileChildren(
 )
 
 interface AuthedRouteChildren {
-  AuthedPatientsRoute: typeof AuthedPatientsRouteWithChildren
   AuthedPostsRoute: typeof AuthedPostsRouteWithChildren
   AuthedRecordingsRoute: typeof AuthedRecordingsRoute
+  AuthedPatientsPatientIdRoute: typeof AuthedPatientsPatientIdRoute
+  AuthedPatientsIndexRoute: typeof AuthedPatientsIndexRoute
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
-  AuthedPatientsRoute: AuthedPatientsRouteWithChildren,
   AuthedPostsRoute: AuthedPostsRouteWithChildren,
   AuthedRecordingsRoute: AuthedRecordingsRoute,
+  AuthedPatientsPatientIdRoute: AuthedPatientsPatientIdRoute,
+  AuthedPatientsIndexRoute: AuthedPatientsIndexRoute,
 }
 
 const AuthedRouteWithChildren =

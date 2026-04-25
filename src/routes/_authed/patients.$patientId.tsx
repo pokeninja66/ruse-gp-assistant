@@ -238,6 +238,66 @@ function PatientDetailPage() {
           </div>
 
         </div>
+
+        {/* Medical History (Appointments) */}
+        <div className="mt-8 bg-white/4 border border-white/8 rounded-2xl p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-semibold text-white flex items-center gap-2">
+              <svg className="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Medical History
+            </h2>
+            <button className="text-sm font-medium text-cyan-400 hover:text-cyan-300 transition-colors">
+              View All
+            </button>
+          </div>
+          
+          {!patient.appointments || patient.appointments.length === 0 ? (
+            <div className="py-8 text-center border-2 border-dashed border-white/5 rounded-xl">
+              <p className="text-gray-500 text-sm">No past appointments found.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {/* Sort by newest first */}
+              {patient.appointments.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(appt => (
+                <div key={appt.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors gap-4">
+                  <div className="flex items-start gap-4">
+                    <div className={`mt-1 w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+                      appt.status === 'completed' ? 'bg-green-500/10 text-green-400' :
+                      appt.status === 'pending' ? 'bg-blue-500/10 text-blue-400' : 'bg-gray-500/10 text-gray-400'
+                    }`}>
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="text-white font-medium">
+                        {appt.status === 'completed' ? 'Completed Session' : 
+                         appt.status === 'pending' ? 'Upcoming Appointment' : 'Session'}
+                      </h3>
+                      <p className="text-sm text-gray-400 mt-0.5">
+                        {appt.started_at || appt.scheduled_at ? new Date(appt.started_at || appt.scheduled_at!).toLocaleString() : 'No date set'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md ${
+                      appt.status === 'completed' ? 'bg-green-500/20 text-green-400' :
+                      appt.status === 'pending' ? 'bg-blue-500/20 text-blue-400' : 'bg-gray-500/20 text-gray-400'
+                    }`}>
+                      {appt.status}
+                    </span>
+                    <button className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-medium text-white transition-colors border border-white/10">
+                      Details
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
       </div>
     </div>
   )

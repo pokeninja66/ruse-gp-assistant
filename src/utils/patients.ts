@@ -158,10 +158,20 @@ export interface PatientMedication {
   created_at: string
 }
 
+export interface PatientAppointment {
+  id: string
+  status: 'pending' | 'transcribed' | 'entities_extracted' | 'completed' | 'cancelled'
+  scheduled_at?: string
+  started_at?: string
+  ended_at?: string
+  created_at: string
+}
+
 export interface PatientDetail extends Patient {
   patient_allergies: PatientAllergy[]
   patient_conditions: PatientCondition[]
   patient_medications: PatientMedication[]
+  appointments: PatientAppointment[]
 }
 
 export const getPatientFn = createServerFn({ method: 'GET' })
@@ -175,7 +185,8 @@ export const getPatientFn = createServerFn({ method: 'GET' })
         *,
         patient_allergies (*),
         patient_conditions (*),
-        patient_medications (*)
+        patient_medications (*),
+        appointments (*)
       `)
       .eq('id', data.id)
       .single()
@@ -264,6 +275,24 @@ export const quickAddDevPatientFn = createServerFn({ method: 'POST' })
         medications.slice(0, numMeds).map(m => ({ patient_id: patient.id, ...m }))
       )
     }
+
+    // 5. Add Appointments
+    const pastDate = new Date(Date.now() - Math.floor(Math.random() * 30 * 24 * 60 * 60 * 1000)).toISOString()
+    await supabase.from('appointments').insert([
+      {
+        patient_id: patient.id,
+        doctor_id: userData.user.id,
+        status: 'completed',
+        started_at: pastDate,
+        ended_at: new Date(new Date(pastDate).getTime() + 30 * 60000).toISOString(), // +30 mins
+      },
+      {
+        patient_id: patient.id,
+        doctor_id: userData.user.id,
+        status: 'pending',
+        scheduled_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // next week
+      }
+    ])
 
     return { error: false, message: 'Dev patient created successfully' }
   })
