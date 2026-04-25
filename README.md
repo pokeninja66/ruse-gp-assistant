@@ -1,3 +1,8 @@
+# Team info:
+- Notion docs -> https://www.notion.so/Team-Task-Tracker-bb2fbcbb80488222a2ef81c3665d38aa?source=copy_link
+
+
+
 # TanStack Start - Supabase Example
 
 A TanStack Start example demonstrating integration with Supabase for authentication and database.
