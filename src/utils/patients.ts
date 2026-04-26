@@ -15,12 +15,23 @@ export interface Patient {
   created_at: string
 }
 
+export interface PatientExtendedInfo {
+  id: string
+  patient_id: string
+  citizenship?: string
+  address?: string
+  insurance_status: 'insured' | 'uninsured' | 'unknown'
+  gp_name?: string
+  notes?: string
+  updated_at: string
+}
+
 export const listPatientsFn = createServerFn({ method: 'GET' }).handler(
-  async (): Promise<Patient[]> => {
+  async (): Promise<(Patient & { extended_info?: PatientExtendedInfo[] })[]> => {
     const supabase = getSupabaseServerClient()
     const { data, error } = await supabase
       .from('patients')
-      .select('*')
+      .select('*, extended_info:patient_extended_info(*)')
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -171,63 +182,98 @@ export interface PatientAppointment {
 }
 
 export interface PatientDetail extends Patient {
-  patient_allergies: PatientAllergy[]
-  patient_conditions: PatientCondition[]
-  patient_medications: PatientMedication[]
-  appointments: PatientAppointment[]
+  medications: PatientMedication[]
+  appointments: any[]
+  recordings: RecordingMeta[]
+  extended_info?: PatientExtendedInfo
 }
 
 export const getPatientFn = createServerFn({ method: 'GET' })
   .inputValidator((d: { id: string }) => d)
   .handler(async ({ data }): Promise<{ error: boolean; message: string; patient?: PatientDetail }> => {
     const supabase = getSupabaseServerClient()
-
-    const { data: patient, error: patientError } = await supabase
+    
+    // Get basic patient info
+    const { data: patient, error } = await supabase
       .from('patients')
       .select(`
         *,
-        patient_allergies (*),
-        patient_conditions (*),
-        patient_medications (*),
-        appointments (*)
+        medications:patient_medications(*),
+        appointments:appointments(*),
+        extended_info:patient_extended_info(*)
       `)
       .eq('id', data.id)
-      .single()
+      .maybeSingle()
 
-    if (patientError) {
-      console.error('[patients] get error:', patientError)
-      return { error: true, message: patientError.message }
+    if (error) {
+      console.error('[patients] get error:', error)
+      return { error: true, message: error.message }
     }
 
-    // Fetch recordings for these appointments separately to avoid PostgREST relationship errors
-    const admin = getSupabaseAdminClient()
-    const apptIds = (patient.appointments || []).map((a: any) => a.id)
+    if (!patient) {
+      return { error: true, message: 'Patient not found' }
+    }
+
+    // Fetch recordings separately for reliability
+    // 1. Direct patient_id match
+    const { data: directRecordings } = await supabase
+      .from('recordings')
+      .select('*')
+      .eq('patient_id', data.id)
     
-    let allRecordings: any[] = []
-    if (apptIds.length > 0) {
-      // @ts-ignore
-      const { data: recs } = await (admin as any)
+    // 2. Also fetch recordings linked via appointments for this patient
+    const appointmentIds = (patient.appointments || []).map((a: any) => a.id)
+    let apptRecordings: any[] = []
+    if (appointmentIds.length > 0) {
+      const { data: apptRecs } = await supabase
         .from('recordings')
         .select('*')
-        .in('appointment_id', apptIds)
-      
-      allRecordings = recs || []
+        .in('appointment_id', appointmentIds)
+      apptRecordings = apptRecs || []
     }
+
+    // Merge and deduplicate
+    const allRecordingsMap = new Map<string, any>()
+    ;(directRecordings || []).forEach((r: any) => allRecordingsMap.set(r.id, r))
+    apptRecordings.forEach((r: any) => allRecordingsMap.set(r.id, r))
+
+    // Process recordings to add public URLs
+    const admin = getSupabaseAdminClient()
+    const enrichedRecordings = Array.from(allRecordingsMap.values()).map((rec: any) => ({
+      ...rec,
+      publicUrl: rec.storage_path 
+        ? admin.storage.from('recordings').getPublicUrl(rec.storage_path).data.publicUrl 
+        : undefined
+    }))
 
     const enrichedPatient = {
       ...patient,
+      recordings: enrichedRecordings,
       appointments: (patient.appointments || []).map((appt: any) => ({
         ...appt,
-        recordings: allRecordings
-          .filter(rec => rec.appointment_id === appt.id)
-          .map(rec => ({
-            ...rec,
-            publicUrl: admin.storage.from('recordings').getPublicUrl(rec.storage_path).data.publicUrl
-          }))
+        recordings: enrichedRecordings.filter((rec: any) => rec.appointment_id === appt.id)
       }))
     }
 
-    return { error: false, message: 'Success', patient: enrichedPatient }
+    return { error: false, message: 'Success', patient: enrichedPatient as unknown as PatientDetail }
+  })
+
+export const saveExtendedInfoFn = createServerFn({ method: 'POST' })
+  .inputValidator((d: { patientId: string; info: Partial<Omit<PatientExtendedInfo, 'id' | 'patient_id'>> }) => d)
+  .handler(async ({ data }): Promise<{ error: boolean; message: string }> => {
+    const supabase = getSupabaseServerClient()
+    const { error } = await supabase
+      .from('patient_extended_info')
+      .upsert({
+        patient_id: data.patientId,
+        ...data.info,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'patient_id' })
+
+    if (error) {
+      return { error: true, message: error.message }
+    }
+    return { error: false, message: 'Saved' }
   })
 
 export const quickAddDevPatientFn = createServerFn({ method: 'POST' })
@@ -246,29 +292,42 @@ export const quickAddDevPatientFn = createServerFn({ method: 'POST' })
       role: 'doctor'
     })
 
-    const firstNames = ['John', 'Jane', 'Alex', 'Sarah', 'Michael', 'Emily']
-    const lastNames = ['Doe', 'Smith', 'Johnson', 'Williams', 'Brown', 'Jones']
+    const firstNames = ['Иван', 'Мария', 'Георги', 'Елена', 'Димитър', 'Николай', 'Петър', 'Йордан', 'Анна', 'Борис']
+    const lastNames = ['Иванов(а)', 'Петров(а)', 'Георгиев(а)', 'Димитров(а)', 'Николов(а)', 'Стоянов(а)', 'Йорданов(а)']
     
     const randomItem = <T>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)]
     
     const dob = new Date(Date.now() - Math.floor(Math.random() * 50 * 365 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0]
+    const firstName = randomItem(firstNames)
+    const rawLastName = randomItem(lastNames)
+    const gender = firstName.endsWith('а') || firstName === 'Мария' || firstName === 'Анна' || firstName === 'Елена' ? 'female' : 'male'
+    const lastName = rawLastName.replace('(а)', gender === 'female' ? 'а' : '')
 
     // 1. Create Patient
     const { data: patient, error: patientError } = await supabase
       .from('patients')
       .insert({
         created_by: userData.user.id,
-        first_name: randomItem(firstNames),
-        last_name: randomItem(lastNames),
+        first_name: firstName,
+        last_name: lastName,
         dob,
-        gender: randomItem(['male', 'female', 'other']),
-        phone: '555-01' + Math.floor(Math.random() * 100),
-        email: `devtest${Math.floor(Math.random() * 10000)}@example.com`,
+        gender,
+        phone: '088' + Math.floor(1000000 + Math.random() * 9000000),
+        email: `patient_${Math.floor(Math.random() * 10000)}@medportal.bg`,
       })
       .select('*')
       .single()
 
     if (patientError || !patient) return { error: true, message: patientError?.message || 'Failed to create patient' }
+
+    // 1.5 Add Extended Info
+    await supabase.from('patient_extended_info').insert({
+      patient_id: patient.id,
+      address: 'Ул. Тестова 123, София',
+      citizenship: 'Българско',
+      gp_name: 'Д-р Иванов',
+      insurance_status: randomItem(['insured', 'uninsured', 'unknown'])
+    })
 
     // 2. Add Allergies
     const allergies = [
@@ -348,4 +407,50 @@ export const addMedicationFn = createServerFn({ method: 'POST' })
       return { error: true, message: error.message }
     }
     return { error: false, message: 'Success' }
+  })
+export const getPatientFullHistoryFn = createServerFn({ method: 'GET' })
+  .inputValidator((d: { patientId: string }) => d)
+  .handler(async ({ data }): Promise<{ error: boolean; message: string; history?: any }> => {
+    const supabase = getSupabaseServerClient()
+    
+    // 1. Get Patient
+    const { data: patient } = await supabase.from('patients').select('*').eq('id', data.patientId).single()
+    if (!patient) return { error: true, message: 'Patient not found' }
+
+    // 2. Get Appointments
+    const { data: appts } = await supabase.from('appointments').select('*').eq('patient_id', data.patientId).order('created_at', { ascending: false })
+
+    // 3. Get Diagnoses
+    const { data: diagnoses } = await supabase.from('appointment_diagnoses').select('*, appointments(patient_id)').eq('appointments.patient_id', data.patientId)
+    // Filter because join might return all if not careful with PostgREST
+    const filteredDiagnoses = (diagnoses || []).filter((d: any) => d.appointments?.patient_id === data.patientId)
+
+    // 4. Get Therapy
+    const { data: therapy } = await supabase.from('therapy_plans').select('*, appointments(patient_id)').eq('appointments.patient_id', data.patientId)
+    const filteredTherapy = (therapy || []).filter((t: any) => t.appointments?.patient_id === data.patientId)
+
+    // 5. Get Referrals
+    const { data: referrals } = await supabase.from('referrals').select('*, appointments(patient_id)').eq('appointments.patient_id', data.patientId)
+    const filteredReferrals = (referrals || []).filter((r: any) => r.appointments?.patient_id === data.patientId)
+
+    // 6. Get Test Orders
+    const { data: tests } = await supabase.from('test_orders').select('*, appointments(patient_id)').eq('appointments.patient_id', data.patientId)
+    const filteredTests = (tests || []).filter((t: any) => t.appointments?.patient_id === data.patientId)
+
+    // 7. Get Recordings
+    const { data: recordings } = await supabase.from('recordings').select('*').eq('patient_id', data.patientId)
+
+    return {
+      error: false,
+      message: 'Success',
+      history: {
+        patient,
+        appointments: appts || [],
+        diagnoses: filteredDiagnoses,
+        therapy: filteredTherapy,
+        referrals: filteredReferrals,
+        testOrders: filteredTests,
+        recordings: recordings || []
+      }
+    }
   })

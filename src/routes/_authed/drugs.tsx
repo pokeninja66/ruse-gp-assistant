@@ -1,128 +1,165 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import * as React from 'react'
-import { searchDrugsFn, type DrugCatalogueEntry } from '../../utils/drugs'
+import { listDrugsFn, searchDrugsFn, seedDrugsFn, type DrugCatalogueEntry } from '../../utils/drugs'
+import { AppSidebar } from '../../components/AppSidebar'
+import { logoutFn } from '../logout'
 
 export const Route = createFileRoute('/_authed/drugs')({
   component: DrugsPage,
 })
 
 function DrugsPage() {
+  const { user } = Route.useRouteContext()
+  const doLogout = useServerFn(logoutFn)
+  const doList = useServerFn(listDrugsFn)
   const doSearch = useServerFn(searchDrugsFn)
-  
+  const doSeed = useServerFn(seedDrugsFn)
+  const navigate = useNavigate()
+
   const [drugs, setDrugs] = React.useState<DrugCatalogueEntry[]>([])
-  const [query, setQuery] = React.useState('')
   const [loading, setLoading] = React.useState(true)
+  const [query, setQuery] = React.useState('')
+  const [total, setTotal] = React.useState(0)
+  const [isSeeding, setIsSeeding] = React.useState(false)
 
-  const load = React.useCallback(async (q: string) => {
+  const load = React.useCallback(async (q?: string) => {
     setLoading(true)
-    const res = await doSearch({ data: { query: q } })
-    setDrugs(res)
+    if (q) {
+      const res = await doSearch({ data: { query: q } })
+      setDrugs(res)
+      setTotal(res.length)
+    } else {
+      const res = await doList({ data: { limit: 100 } })
+      setDrugs(res.drugs)
+      setTotal(res.total)
+    }
     setLoading(false)
-  }, [doSearch])
+  }, [doList, doSearch])
 
-  // Initial load
   React.useEffect(() => {
-    load('')
+    load()
   }, [load])
 
-  // Debounced search
-  React.useEffect(() => {
-    const timer = setTimeout(() => {
-      load(query)
-    }, 300)
-    return () => clearTimeout(timer)
-  }, [query, load])
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    load(query)
+  }
+
+  const handleSeed = async () => {
+    if (!confirm('Наистина ли искате да импортирате каталога с лекарства?')) return
+    setIsSeeding(true)
+    const res = await doSeed()
+    setIsSeeding(false)
+    if (res.error) alert(res.message)
+    else {
+      alert('Каталогът е импортиран успешно!')
+      load()
+    }
+  }
 
   return (
-    <div className="min-h-[calc(100dvh-3.5rem)] bg-gray-950 p-4 sm:p-8">
-      <div className="max-w-5xl mx-auto">
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-white tracking-tight">Drug Catalogue</h1>
-            <p className="text-gray-400 mt-2 text-sm max-w-xl">
-              Search and browse the national drug catalogue. Filter by product name or active substance.
-            </p>
-          </div>
+    <div className="mp-layout">
+      <AppSidebar user={user} onLogout={() => doLogout().then(() => navigate({ to: '/login' }))} />
+      <main className="mp-main">
+        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
           
-          <div className="relative w-full md:w-80 shrink-0">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input
-              type="text"
-              placeholder="Search medications..."
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-900 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-all"
-            />
+          <div className="flex items-center justify-between mb-8 flex-wrap gap-4">
+            <div>
+              <h1 className="text-3xl font-extrabold text-mp-text tracking-tight">Каталог на лекарствата</h1>
+              <p className="text-mp-text-muted mt-1">Търсете лекарства, ATC кодове и фармацевтични форми.</p>
+            </div>
+            <div className="flex gap-3">
+              {total === 0 && (
+                <button 
+                  onClick={handleSeed} 
+                  disabled={isSeeding}
+                  className="mp-btn-outline h-12 px-6 flex items-center gap-2"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                  {isSeeding ? 'Импортиране...' : 'Импортирай каталог'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          <form onSubmit={handleSearch} className="mb-8">
+            <div className="relative">
+              <input 
+                value={query} 
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Търсене по име, активно вещество или ATC код..." 
+                className="mp-input h-16 pl-14 pr-40 text-lg shadow-sm"
+              />
+              <svg className="absolute left-5 top-1/2 -translate-y-1/2 text-mp-text-subtle" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              <button type="submit" className="absolute right-3 top-3 bottom-3 mp-btn-primary px-8 text-sm font-bold">ТЪРСИ</button>
+            </div>
+          </form>
+
+          <div className="mp-card overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-mp-bg border-b border-mp-border">
+                  <tr>
+                    <th className="p-4 text-[10px] font-bold text-mp-text-muted uppercase tracking-wider">Име на продукта</th>
+                    <th className="p-4 text-[10px] font-bold text-mp-text-muted uppercase tracking-wider">Активно вещество</th>
+                    <th className="p-4 text-[10px] font-bold text-mp-text-muted uppercase tracking-wider">ATC Код</th>
+                    <th className="p-4 text-[10px] font-bold text-mp-text-muted uppercase tracking-wider">Форма</th>
+                    <th className="p-4 text-[10px] font-bold text-mp-text-muted uppercase tracking-wider">Режим</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-mp-border">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={5} className="p-12 text-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-mp-green mx-auto"></div>
+                      </td>
+                    </tr>
+                  ) : drugs.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="p-12 text-center text-mp-text-subtle font-medium">
+                        Няма намерени лекарства. {total === 0 && 'Моля, импортирайте каталога.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    drugs.map(drug => (
+                      <tr key={drug.id} className="hover:bg-mp-bg/50 transition-colors group">
+                        <td className="p-4">
+                          <p className="font-bold text-mp-text group-hover:text-mp-green transition-colors">{drug.product_name}</p>
+                        </td>
+                        <td className="p-4">
+                          <p className="text-sm text-mp-text-muted">{drug.active_substance}</p>
+                        </td>
+                        <td className="p-4">
+                          <span className="text-[11px] font-bold bg-mp-bg px-2 py-1 rounded border border-mp-border text-mp-text-muted">{drug.atc_code}</span>
+                        </td>
+                        <td className="p-4">
+                          <p className="text-xs text-mp-text-muted truncate max-w-[200px]">{drug.dosage_form}</p>
+                        </td>
+                        <td className="p-4">
+                          {drug.prescription_status === 'prescription_only' ? (
+                            <span className="text-[10px] font-bold text-mp-danger bg-mp-danger-bg px-2 py-1 rounded uppercase tracking-tighter">Рецепта</span>
+                          ) : drug.prescription_status === 'otc' ? (
+                            <span className="text-[10px] font-bold text-mp-green-dark bg-mp-green-light px-2 py-1 rounded uppercase tracking-tighter">Свободно</span>
+                          ) : (
+                            <span className="text-[10px] font-bold text-mp-text-subtle bg-mp-bg px-2 py-1 rounded uppercase tracking-tighter">{drug.prescription_status}</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {total > 0 && !loading && (
+              <div className="p-4 bg-mp-bg/30 border-t border-mp-border text-center">
+                <p className="text-xs text-mp-text-muted">Показани са {drugs.length} от общо {total} лекарства</p>
+              </div>
+            )}
           </div>
         </div>
-
-        {loading && drugs.length === 0 ? (
-          <div className="flex justify-center py-20">
-            <svg className="animate-spin h-8 w-8 text-violet-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-          </div>
-        ) : drugs.length === 0 ? (
-          <div className="py-20 text-center border-2 border-dashed border-white/5 rounded-2xl bg-white/[0.02]">
-            <p className="text-gray-400">No drugs found matching "{query}"</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {drugs.map(drug => (
-              <div key={drug.id} className="bg-white/4 border border-white/8 rounded-2xl p-5 hover:bg-white/6 transition-colors group flex flex-col h-full">
-                <div className="flex justify-between items-start mb-3">
-                  <h3 className="text-lg font-semibold text-white group-hover:text-violet-400 transition-colors line-clamp-2 leading-tight">
-                    {drug.product_name}
-                  </h3>
-                  {drug.prescription_status === 'otc' ? (
-                    <span className="shrink-0 ml-2 px-2 py-1 text-[10px] font-bold uppercase tracking-wider rounded bg-green-500/20 text-green-400 border border-green-500/30">
-                      OTC
-                    </span>
-                  ) : drug.prescription_status === 'prescription_only' ? (
-                    <span className="shrink-0 ml-2 px-2 py-1 text-[10px] font-bold uppercase tracking-wider rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
-                      Rx
-                    </span>
-                  ) : (
-                    <span className="shrink-0 ml-2 px-2 py-1 text-[10px] font-bold uppercase tracking-wider rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                      Hosp
-                    </span>
-                  )}
-                </div>
-                
-                <div className="text-sm text-gray-400 mb-4 flex-1">
-                  <span className="font-medium text-gray-300">Active:</span> {drug.active_substance || 'N/A'}
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 mt-auto pt-4 border-t border-white/5">
-                  <span className="text-xs px-2 py-1 rounded-md bg-white/5 text-gray-300 border border-white/5" title="ATC Code">
-                    {drug.atc_code || 'Unknown ATC'}
-                  </span>
-                  <span className="text-xs px-2 py-1 rounded-md bg-white/5 text-gray-300 border border-white/5" title="Dosage Form">
-                    {drug.dosage_form || 'Unknown form'}
-                  </span>
-                  
-                  <div className="ml-auto flex gap-1">
-                    {drug.authorised_eu && (
-                      <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-900/40 text-blue-300 border border-blue-500/30 text-[10px] font-bold" title="EU Authorised">
-                        EU
-                      </span>
-                    )}
-                    {drug.authorised_bg && (
-                      <span className="flex items-center justify-center w-6 h-6 rounded-full bg-green-900/40 text-green-300 border border-green-500/30 text-[10px] font-bold" title="BG Authorised">
-                        BG
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+        <div style={{ height: '4rem' }} />
+      </main>
     </div>
   )
 }

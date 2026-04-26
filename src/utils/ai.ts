@@ -5,20 +5,16 @@ import OpenAI from 'openai'
 // Initialize OpenAI client inside the handlers or here if we have env
 // We'll create it dynamically so we can guarantee access to process.env
 function getOpenAIClient() {
-  // Check multiple sources for the API key to support local dev (Vite), 
-  // build-time envs, and runtime envs (Cloudflare/Nitro).
+  // Use process.env for server-side secrets. 
+  // Avoid import.meta.env.VITE_* as it may be inlined by the bundler.
   const apiKey = 
-    // @ts-ignore
-    import.meta.env?.VITE_OPENAI_API_KEY || 
-    process.env?.VITE_OPENAI_API_KEY || 
     process.env?.OPENAI_API_KEY ||
-    // @ts-ignore
-    globalThis?.VITE_OPENAI_API_KEY ||
+    process.env?.VITE_OPENAI_API_KEY || 
     // @ts-ignore
     globalThis?.OPENAI_API_KEY
 
   if (!apiKey) {
-    throw new Error('Missing OpenAI API Key in environment variables (VITE_OPENAI_API_KEY or OPENAI_API_KEY)')
+    throw new Error('Missing OpenAI API Key in environment variables (OPENAI_API_KEY)')
   }
   return new OpenAI({ apiKey, dangerouslyAllowBrowser: false })
 }
@@ -54,7 +50,7 @@ export const transcribeAudioFn = createServerFn({ method: 'POST' })
 
 export const analyzeConsultationFn = createServerFn({ method: 'POST' })
   .inputValidator((d: { appointmentId: string; patientId: string; transcript: string }) => d)
-  .handler(async ({ data }): Promise<{ error: boolean; message: string }> => {
+  .handler(async ({ data }): Promise<{ error: boolean; message: string; analysis?: any }> => {
     const supabase = getSupabaseServerClient()
     const { data: userData, error: userError } = await supabase.auth.getUser()
     if (userError || !userData.user) return { error: true, message: 'Unauthorized' }
@@ -78,19 +74,33 @@ Known Allergies: ${patient.patient_allergies.map((a: any) => a.substance).join('
 Known Conditions: ${patient.patient_conditions.map((c: any) => c.condition_name).join(', ') || 'None'}
 Current Medications: ${patient.patient_medications.map((m: any) => m.drug_name).join(', ') || 'None'}
 
-Extract medical entities (symptoms, diagnoses, drug suggestions) and provide a primary recommendation.
-DIAGNOSIS POLICY: If a clear diagnosis isn't provided in the transcript, you MUST still provide a "guess diagnosis" based on the symptoms. In this case, prefix the diagnosis value with "[GUESS] " or "[PROVISIONAL] ". Never leave the diagnosis list empty if symptoms are present.
+Extract medical entities (symptoms, diagnoses, drug suggestions, vitals, physical findings, risk factors, medical history) and provide a primary recommendation.
+
+ANAMNESIS EXTRACTION:
+- Extract "onset_description" (when and how the symptoms started).
+- Extract "risk_factors" (smoking, obesity, family history, etc.).
+- Extract "ai_summary" (a 1-2 sentence summary of the patient's state).
+
+DIAGNOSIS POLICY: You MUST ALWAYS provide at least one diagnosis. If a specific diagnosis is mentioned in the transcript, extract it. If NO clear diagnosis is provided, you MUST use your medical knowledge to provide the most likely "guess diagnosis" based on the described symptoms.
+IMPORTANT: If the diagnosis is a guess/provisional (not explicitly stated by a doctor in the transcript), you MUST prefix the "value" with "[GUESS] " and set an attribute "is_guess": true. Never leave the diagnosis list empty if symptoms are present.
+
+VITALS: If you hear vitals (blood pressure, heart rate, temperature, SpO2, weight), extract them as entity_type "vital". The "value" should be the number/reading, and "attributes" should contain the "type" (e.g. "blood_pressure").
 
 Output your analysis EXACTLY matching the following JSON schema:
 {
   "entities": [
     {
-      "entity_type": "symptom" | "allergy" | "medication" | "condition" | "diagnosis" | "drug_suggestion",
-      "value": "Name of the entity (e.g. [GUESS] Common Cold)",
+      "entity_type": "symptom" | "allergy" | "medication" | "condition" | "diagnosis" | "drug_suggestion" | "vital" | "physical_finding" | "risk_factor",
+      "value": "Name of the entity",
       "negated": false,
-      "attributes": { "severity": "mild/moderate/severe", "duration": "e.g. 2 days" }
+      "attributes": { "severity": "mild/moderate/severe", "duration": "e.g. 2 days", "type": "blood_pressure/pulse/temp/etc" }
     }
   ],
+  "anamnesis_info": {
+    "onset_description": "text",
+    "risk_factors": "text",
+    "ai_summary": "text"
+  },
   "recommendation": {
     "drug_name": "Name of drug if applicable, or None",
     "dosage": "e.g. 500mg",
@@ -99,7 +109,8 @@ Output your analysis EXACTLY matching the following JSON schema:
     "rationale": "Why this recommendation is made",
     "confidence": "high/medium/low"
   }
-}`
+}
+`
 
     try {
       const completion = await openai.chat.completions.create({
@@ -116,15 +127,18 @@ Output your analysis EXACTLY matching the following JSON schema:
       
       const analysis = JSON.parse(content)
 
-      // 3. Save Transcript to DB
-      await supabase.from('transcripts').insert({
-        appointment_id: data.appointmentId,
-        raw_text: data.transcript,
-        language: 'en'
-      })
+      // 3. Save Transcript to DB (if appointment exists)
+      if (data.appointmentId) {
+        const { error: transError } = await supabase.from('transcripts').insert({
+          appointment_id: data.appointmentId,
+          raw_text: data.transcript,
+          language: 'bg'
+        })
+        if (transError) console.warn('[ai] transcript save warning:', transError.message)
+      }
 
-      // 4. Save Entities
-      if (analysis.entities && analysis.entities.length > 0) {
+      // 4. Save Entities (if appointment exists)
+      if (data.appointmentId && analysis.entities && analysis.entities.length > 0) {
         const entitiesToInsert = analysis.entities.map((ent: any) => ({
           appointment_id: data.appointmentId,
           entity_type: ent.entity_type,
@@ -155,7 +169,57 @@ Output your analysis EXACTLY matching the following JSON schema:
         .update({ status: 'entities_extracted', ended_at: new Date().toISOString() })
         .eq('id', data.appointmentId)
 
-      return { error: false, message: 'Analysis complete' }
+      // 7. Auto-populate Anamnesis for the clinical wizard
+      try {
+        const symptoms = analysis.entities
+          .filter((e: any) => e.entity_type === 'symptom' && !e.negated)
+          .map((e: any) => ({ name: e.value, severity: e.attributes?.severity, duration: e.attributes?.duration }))
+        
+        const allergies = analysis.entities
+          .filter((e: any) => e.entity_type === 'allergy' && !e.negated)
+          .map((e: any) => e.value).join(', ')
+        
+        const meds = analysis.entities
+          .filter((e: any) => e.entity_type === 'medication' && !e.negated)
+          .map((e: any) => e.value).join(', ')
+        
+        const conditions = analysis.entities
+          .filter((e: any) => (e.entity_type === 'condition' || e.entity_type === 'diagnosis') && !e.negated)
+          .map((e: any) => e.value).join(', ')
+
+        const anamnesisData = {
+          appointment_id: data.appointmentId,
+          symptoms: symptoms,
+          free_text: data.transcript,
+          onset_description: analysis.anamnesis_info?.onset_description || '',
+          comorbidities: conditions,
+          risk_factors: analysis.anamnesis_info?.risk_factors || '',
+          current_meds_text: meds,
+          allergies_text: allergies,
+          ai_summary: analysis.anamnesis_info?.ai_summary || '',
+          ai_generated_at: new Date().toISOString()
+        }
+
+        // Check if anamnesis exists
+        const { data: existingAnamnesis } = await supabase
+          .from('patient_anamnesis')
+          .select('id')
+          .eq('appointment_id', data.appointmentId)
+          .maybeSingle()
+
+        if (existingAnamnesis) {
+          await supabase.from('patient_anamnesis')
+            .update(anamnesisData)
+            .eq('id', existingAnamnesis.id)
+        } else {
+          await supabase.from('patient_anamnesis').insert(anamnesisData)
+        }
+      } catch (anamnesisErr) {
+        console.error('[ai] failed to auto-populate anamnesis:', anamnesisErr)
+        // Don't fail the whole analysis if anamnesis populate fails
+      }
+
+      return { error: false, message: 'Analysis complete', analysis }
     } catch (err: any) {
       console.error('[ai] analyze error:', err)
       return { error: true, message: err.message || 'Analysis failed' }
@@ -243,3 +307,85 @@ export const retryAnalysisFn = createServerFn({ method: 'POST' })
       return { error: true, message: err.message || 'Retry failed' }
     }
   })
+
+export const analyzeRecordingIdFn = createServerFn({ method: 'POST' })
+  .inputValidator((d: { recordingId: string }) => d)
+  .handler(async ({ data }): Promise<{ error: boolean; message: string; analysis?: any }> => {
+    const supabase = getSupabaseServerClient()
+    const { data: userData } = await supabase.auth.getUser()
+    if (!userData.user) return { error: true, message: 'Unauthorized' }
+
+    // 1. Get recording using admin client to bypass RLS issues
+    const admin = (await import('./supabaseAdmin')).getSupabaseAdminClient()
+    console.log('[ai] analyzing recording:', data.recordingId, 'for user:', userData.user.id)
+
+    const { data: recording, error: recError } = await (admin as any)
+      .from('recordings')
+      .select('*')
+      .eq('id', data.recordingId)
+      .single()
+
+    if (recError || !recording) {
+      console.error('[ai] recording fetch error:', recError, 'id:', data.recordingId)
+      return { error: true, message: 'Recording not found' }
+    }
+
+    // 1.5 Get linked appointment manually (bypass join relationship issues)
+    let appointment: any = null
+    if (recording.appointment_id) {
+      const { data: appt } = await (admin as any)
+        .from('appointments')
+        .select('*')
+        .eq('id', recording.appointment_id)
+        .single()
+      appointment = appt
+    }
+
+    console.log('[ai] recording found:', recording.name, 'owner:', recording.user_id)
+
+    // Verify ownership manually
+    if (recording.user_id !== userData.user.id) {
+       // Check if doctor is linked via appointment
+       const isApptDoctor = appointment?.doctor_id === userData.user.id
+       if (!isApptDoctor) {
+         return { error: true, message: 'Unauthorized access to recording' }
+       }
+    }
+
+    try {
+      const admin = (await import('./supabaseAdmin')).getSupabaseAdminClient()
+      const { data: fileData, error: downloadError } = await admin.storage
+        .from('recordings')
+        .download(recording.storage_path)
+
+      if (downloadError || !fileData) {
+        return { error: true, message: `Failed to download audio: ${downloadError?.message}` }
+      }
+
+      const arrayBuffer = await fileData.arrayBuffer()
+      const buffer = Buffer.from(arrayBuffer)
+      
+      const openai = getOpenAIClient()
+      const extension = recording.storage_path.split('.').pop() || 'webm'
+      const file = new File([buffer], `audio.${extension}`, { type: `audio/${extension}` })
+
+      const transResponse = await openai.audio.transcriptions.create({
+        file,
+        model: 'whisper-1',
+      })
+
+      const transcript = transResponse.text
+
+      // Now analyze
+      return analyzeConsultationFn({ data: { 
+        appointmentId: recording.appointment_id, 
+        patientId: recording.patient_id || appointment?.patient_id, 
+        transcript 
+      }})
+
+    } catch (err: any) {
+      console.error('[ai] analyze recording error:', err)
+      return { error: true, message: err.message || 'Analysis failed' }
+    }
+  })
+

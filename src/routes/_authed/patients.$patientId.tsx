@@ -1,13 +1,14 @@
-import { createFileRoute, Link, useParams, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import * as React from 'react'
-import { getPatientFn, addMedicationFn, type PatientDetail } from '../../utils/patients'
-import { createAppointmentFn } from '../../utils/appointments'
-import { RecordingCard } from '../../components/RecordingCard'
-import { retryAnalysisFn } from '../../utils/ai'
-import { searchDrugsFn, type DrugCatalogueEntry } from '../../utils/drugs'
-import { deleteAppointmentFn } from '../../utils/appointments'
+import { getPatientFn, addMedicationFn, saveExtendedInfoFn, type PatientDetail } from '../../utils/patients'
+import { createAppointmentFn, deleteAppointmentFn } from '../../utils/appointments'
 import { deleteRecordingFn } from '../../utils/recordings'
+import { RecordingCard } from '../../components/RecordingCard'
+import { AppSidebar } from '../../components/AppSidebar'
+import { SessionRecordings } from '../../components/SessionRecordings'
+import { logoutFn } from '../logout'
+import { searchDrugsFn, type DrugCatalogueEntry } from '../../utils/drugs'
 
 export const Route = createFileRoute('/_authed/patients/$patientId')({
   component: PatientDetailPage,
@@ -15,22 +16,23 @@ export const Route = createFileRoute('/_authed/patients/$patientId')({
 
 function PatientDetailPage() {
   const { patientId } = Route.useParams()
+  const { user } = Route.useRouteContext()
   const navigate = useNavigate()
   const doGetPatient = useServerFn(getPatientFn)
   const doCreateAppointment = useServerFn(createAppointmentFn)
-  const doRetry = useServerFn(retryAnalysisFn)
-  const doAddMed = useServerFn(addMedicationFn)
-  const doSearchDrugs = useServerFn(searchDrugsFn)
+  const doSaveExtended = useServerFn(saveExtendedInfoFn)
+  const doLogout = useServerFn(logoutFn)
   const doDeleteAppt = useServerFn(deleteAppointmentFn)
   const doDeleteRec = useServerFn(deleteRecordingFn)
-  
+  const doAddMed = useServerFn(addMedicationFn)
+  const doSearchDrugs = useServerFn(searchDrugsFn)
+
   const [patient, setPatient] = React.useState<PatientDetail | null>(null)
   const [loading, setLoading] = React.useState(true)
   const [startingSession, setStartingSession] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
-  const [analyzingApptId, setAnalyzingApptId] = React.useState<string | null>(null)
 
-  // Medication Modal State
+  // Med Modal
   const [showMedModal, setShowMedModal] = React.useState(false)
   const [medQuery, setMedQuery] = React.useState('')
   const [medResults, setMedResults] = React.useState<DrugCatalogueEntry[]>([])
@@ -39,18 +41,90 @@ function PatientDetailPage() {
   const [frequency, setFrequency] = React.useState('')
   const [savingMed, setSavingMed] = React.useState(false)
 
-  // Debounced search for modal
-  React.useEffect(() => {
-    if (!medQuery) {
-      setMedResults([])
-      return
+  // Extended Info Edit
+  const [isEditingExtended, setIsEditingExtended] = React.useState(false)
+  const [extAddress, setExtAddress] = React.useState('')
+  const [extCitizenship, setExtCitizenship] = React.useState('')
+  const [extGP, setExtGP] = React.useState('')
+  const [extInsurance, setExtInsurance] = React.useState<'insured' | 'uninsured' | 'unknown'>('unknown')
+  const [isSavingExt, setIsSavingExt] = React.useState(false)
+
+  const load = React.useCallback(async () => {
+    setLoading(true)
+    const res = await doGetPatient({ data: { id: patientId } })
+    if (res.error) {
+      setError(res.message)
+    } else if (res.patient) {
+      setPatient(res.patient)
+      if (res.patient.extended_info) {
+        setExtAddress(res.patient.extended_info.address || '')
+        setExtCitizenship(res.patient.extended_info.citizenship || '')
+        setExtGP(res.patient.extended_info.gp_name || '')
+        setExtInsurance(res.patient.extended_info.insurance_status || 'unknown')
+      }
     }
-    const timer = setTimeout(async () => {
+    setLoading(false)
+  }, [patientId, doGetPatient])
+
+  React.useEffect(() => {
+    load()
+  }, [load])
+
+  // Med Search
+  React.useEffect(() => {
+    if (!medQuery) { setMedResults([]); return }
+    const t = setTimeout(async () => {
       const res = await doSearchDrugs({ data: { query: medQuery } })
       setMedResults(res)
     }, 300)
-    return () => clearTimeout(timer)
+    return () => clearTimeout(t)
   }, [medQuery, doSearchDrugs])
+
+  const handleStartSession = async () => {
+    setStartingSession(true)
+    const res = await doCreateAppointment({ data: { patientId } })
+    if (res.error) {
+      alert(res.message)
+      setStartingSession(false)
+    } else if (res.appointmentId) {
+      navigate({
+        to: '/session/$appointmentId/anamnesis',
+        params: { appointmentId: res.appointmentId }
+      })
+    }
+  }
+
+  const handleSaveExtended = async () => {
+    setIsSavingExt(true)
+    await doSaveExtended({
+      data: {
+        patientId,
+        info: {
+          address: extAddress,
+          citizenship: extCitizenship,
+          gp_name: extGP,
+          insurance_status: extInsurance
+        }
+      }
+    })
+    setIsSavingExt(false)
+    setIsEditingExtended(false)
+    load()
+  }
+
+  const handleDeleteRecording = async (id: string, storagePath?: string) => {
+    if (!window.confirm('Наистина ли искате да изтриете този запис?')) return
+    const res = await doDeleteRec({ data: { id, storagePath } })
+    if (res.error) alert(res.message)
+    else load()
+  }
+
+  const handleDeleteAppointment = async (id: string) => {
+    if (!window.confirm('Наистина ли искате да изтриете този медицински запис? Това ще изтрие и всички свързани записи и анализи.')) return
+    const res = await doDeleteAppt({ data: { id } })
+    if (res.error) alert(res.message)
+    else load()
+  }
 
   const handlePrescribe = async () => {
     if (!selectedDrug) return
@@ -65,501 +139,406 @@ function PatientDetailPage() {
       }
     })
     setSavingMed(false)
-    if (res.error) {
-      alert(res.message)
-    } else {
-      setShowMedModal(false)
-      setSelectedDrug(null)
-      setDosage('')
-      setFrequency('')
-      setMedQuery('')
-      load() // reload patient
-    }
-  }
-
-  const load = React.useCallback(async () => {
-    setLoading(true)
-    const res = await doGetPatient({ data: { id: patientId } })
-    if (res.error) {
-      setError(res.message)
-    } else if (res.patient) {
-      setPatient(res.patient)
-    }
-    setLoading(false)
-  }, [patientId, doGetPatient])
-
-  const handleDeleteRecording = async (id: string, storagePath?: string) => {
-    if (!window.confirm('Are you sure you want to delete this recording?')) return
-    const res = await doDeleteRec({ data: { id, storagePath } })
     if (res.error) alert(res.message)
-    else load()
+    else { setShowMedModal(false); load() }
   }
-
-  const handleDeleteAppointment = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this medical record? This will also delete any linked recordings and analysis.')) return
-    const res = await doDeleteAppt({ data: { id } })
-    if (res.error) alert(res.message)
-    else load()
-  }
-
-  React.useEffect(() => {
-    load()
-  }, [load])
 
   if (loading) {
     return (
-      <div className="min-h-[calc(100dvh-3.5rem)] bg-gray-950 flex items-center justify-center">
-        <svg className="animate-spin w-8 h-8 text-violet-400" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-        </svg>
+      <div className="mp-layout">
+        <AppSidebar user={user} onLogout={() => doLogout().then(() => navigate({ to: '/login' }))} />
+        <main className="mp-main flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-mp-green"></div>
+        </main>
       </div>
     )
   }
 
-  if (error || !patient) {
+  if (!patient) {
     return (
-      <div className="min-h-[calc(100dvh-3.5rem)] bg-gray-950 flex flex-col items-center justify-center text-center p-6">
-        <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
-          <svg className="w-8 h-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-        </div>
-        <h1 className="text-xl font-bold text-white mb-2">Failed to load patient</h1>
-        <p className="text-gray-400 mb-6">{error || 'Patient not found'}</p>
-        <Link to="/patients" className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-sm font-medium transition-colors">
-          Back to Patients
-        </Link>
+      <div className="mp-layout">
+        <AppSidebar user={user} onLogout={() => doLogout().then(() => navigate({ to: '/login' }))} />
+        <main className="mp-main">
+          <div className="mp-card p-8 text-center">
+            <h1 className="text-xl font-bold text-mp-text">Пациентът не е намерен</h1>
+            <Link to="/patients" className="mp-btn-ghost mt-4 inline-flex">Обратно към списъка</Link>
+          </div>
+        </main>
       </div>
     )
+  }
+
+  const calculateAge = (dob: string) => {
+    const birthday = new Date(dob)
+    const ageDifMs = Date.now() - birthday.getTime()
+    const ageDate = new Date(ageDifMs)
+    return Math.abs(ageDate.getUTCFullYear() - 1970)
   }
 
   return (
-    <div className="min-h-[calc(100dvh-3.5rem)] bg-gray-950 relative">
-      {/* Ambient background */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden -z-0">
-        <div className="absolute top-0 right-1/4 w-[500px] h-[500px] bg-cyan-600/5 rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 left-1/4 w-[600px] h-[600px] bg-violet-600/5 rounded-full blur-3xl" />
-      </div>
+    <div className="mp-layout">
+      <AppSidebar
+        user={user}
+        patientId={patientId}
+        patientName={`${patient?.first_name} ${patient?.last_name}`}
+        onLogout={() => doLogout().then(() => navigate({ to: '/login' }))}
+      />
+      <main className="mp-main">
+        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
 
-      <div className="relative z-10 max-w-5xl mx-auto px-4 py-10">
-        {/* Breadcrumb / Back button */}
-        <Link to="/patients" className="inline-flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors mb-6 group">
-          <svg className="w-4 h-4 transition-transform group-hover:-translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-          </svg>
-          Back to Patients
-        </Link>
+          {/* Breadcrumbs & Header */}
+          <div className="mb-8">
+            <nav className="flex items-center gap-1.5 text-sm font-medium text-mp-text-muted mb-4">
+              <Link to="/patients" className="hover:text-mp-green transition-colors text-decoration-none">Пациенти</Link>
+              <span>›</span>
+              <span className="text-mp-text">Профил на пациент</span>
+            </nav>
 
-        {/* Header Profile Card */}
-        <div className="bg-white/4 border border-white/8 rounded-2xl p-6 md:p-8 mb-8 backdrop-blur-sm flex flex-col md:flex-row md:items-center gap-6">
-          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-violet-600 to-cyan-600 flex items-center justify-center text-2xl font-bold text-white uppercase shadow-lg shadow-violet-500/20 shrink-0">
-            {patient.first_name[0]}{patient.last_name[0]}
-          </div>
-          <div className="flex-1">
-            <h1 className="text-3xl font-bold text-white tracking-tight">
-              {patient.first_name} {patient.last_name}
-            </h1>
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-2 text-sm text-gray-400">
-              <span className="flex items-center gap-1.5">
-                <svg className="w-4 h-4 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                {new Date(patient.dob).toLocaleDateString()}
-              </span>
-              <span className="flex items-center gap-1.5 capitalize">
-                <svg className="w-4 h-4 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-                {patient.gender}
-              </span>
-              {(patient.email || patient.phone) && (
-                <span className="flex items-center gap-1.5">
-                  <svg className="w-4 h-4 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                  </svg>
-                  {patient.email} {patient.email && patient.phone && '·'} {patient.phone}
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="shrink-0 flex gap-3">
-             <button className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white text-sm font-medium transition-colors border border-white/10">
-               Edit Patient
-             </button>
-             <button
-               disabled={startingSession}
-               onClick={async () => {
-                 setStartingSession(true)
-                 const res = await doCreateAppointment({ data: { patientId } })
-                 if (!res.error && res.appointmentId) {
-                   navigate({ to: '/session/$appointmentId', params: { appointmentId: res.appointmentId } })
-                 } else {
-                   alert(res.message || 'Failed to start session')
-                   setStartingSession(false)
-                 }
-               }}
-               className="px-4 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 text-white text-sm font-medium transition-all shadow-lg shadow-violet-500/20 disabled:opacity-50"
-             >
-               {startingSession ? 'Starting...' : 'Start Session'}
-             </button>
-          </div>
-        </div>
+            <div className="flex items-start justify-between flex-wrap gap-4">
+              <div className="flex items-center gap-5">
+                <div className="w-20 h-20 rounded-2xl bg-mp-green-light flex items-center justify-center text-mp-green text-3xl font-bold">
+                  {patient.first_name[0]}{patient.last_name[0]}
+                </div>
+                <div>
+                  <h1 className="text-3xl font-extrabold text-mp-text tracking-tight leading-tight">
+                    {patient.first_name} {patient.last_name}
+                  </h1>
+                  <div className="flex items-center gap-3 mt-1.5 text-mp-text-muted font-medium">
+                    <span>{patient.gender === 'male' ? 'Мъж' : patient.gender === 'female' ? 'Жена' : 'Друг'}</span>
+                    <span className="w-1 h-1 rounded-full bg-mp-border"></span>
+                    <span>{calculateAge(patient.dob)} г. ({new Date(patient.dob).toLocaleDateString('bg-BG')})</span>
+                  </div>
+                </div>
+              </div>
 
-        {/* 3-Column Grid for Data */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          
-          {/* Allergies */}
-          <div className="bg-white/4 border border-white/8 rounded-2xl p-6 flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                <svg className="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-                Allergies
-              </h2>
-              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-white/10 text-gray-300">
-                {patient.patient_allergies.length}
-              </span>
-            </div>
-            {patient.patient_allergies.length === 0 ? (
-              <p className="text-sm text-gray-500 italic mt-2">No known allergies recorded.</p>
-            ) : (
-              <ul className="space-y-3 mt-2 flex-1">
-                {patient.patient_allergies.map(allergy => (
-                  <li key={allergy.id} className="p-3 rounded-xl bg-white/5 border border-white/5 flex flex-col gap-1.5">
-                    <div className="flex justify-between items-start">
-                      <span className="font-medium text-gray-200">{allergy.substance}</span>
-                      <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded flex-shrink-0 ${
-                        allergy.severity === 'severe' ? 'bg-red-500/20 text-red-400' : 
-                        allergy.severity === 'moderate' ? 'bg-amber-500/20 text-amber-400' : 'bg-gray-500/20 text-gray-400'
-                      }`}>
-                        {allergy.severity}
-                      </span>
-                    </div>
-                    <div className="text-xs text-gray-500 flex items-center gap-1.5">
-                       {allergy.certainty === 'confirmed' ? (
-                          <svg className="w-3.5 h-3.5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-                       ) : (
-                          <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                       )}
-                       {allergy.certainty}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          {/* Conditions */}
-          <div className="bg-white/4 border border-white/8 rounded-2xl p-6 flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                <svg className="w-5 h-5 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75" />
-                </svg>
-                Conditions
-              </h2>
-              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-white/10 text-gray-300">
-                {patient.patient_conditions.length}
-              </span>
-            </div>
-            {patient.patient_conditions.length === 0 ? (
-              <p className="text-sm text-gray-500 italic mt-2">No underlying conditions recorded.</p>
-            ) : (
-              <ul className="space-y-3 mt-2 flex-1">
-                {patient.patient_conditions.map(condition => (
-                  <li key={condition.id} className="p-3 rounded-xl bg-white/5 border border-white/5 flex flex-col gap-1.5">
-                    <div className="flex justify-between items-start">
-                      <span className="font-medium text-gray-200">{condition.condition_name}</span>
-                      <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded flex-shrink-0 ${
-                        condition.status === 'active' ? 'bg-amber-500/20 text-amber-400' : 'bg-gray-500/20 text-gray-400'
-                      }`}>
-                        {condition.status}
-                      </span>
-                    </div>
-                    {condition.diagnosed_date && (
-                      <div className="text-xs text-gray-500">
-                        Diagnosed: {new Date(condition.diagnosed_date).toLocaleDateString()}
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          {/* Medications */}
-          <div className="bg-white/4 border border-white/8 rounded-2xl p-6 flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                <svg className="w-5 h-5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                </svg>
-                Medications
-              </h2>
               <div className="flex items-center gap-3">
-                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-white/10 text-gray-300">
-                  {patient.patient_medications.length}
-                </span>
                 <button
-                  onClick={() => setShowMedModal(true)}
-                  className="text-xs font-medium px-3 py-1.5 rounded-lg bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 transition border border-cyan-500/30 flex items-center gap-1"
+                  onClick={handleStartSession}
+                  disabled={startingSession}
+                  className="mp-btn-primary h-14 px-8 text-base shadow-lg shadow-mp-green/20"
                 >
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-                  </svg>
-                  Prescribe
+                  {startingSession ? 'Стартиране...' : 'СТАРТИРАЙ ПРЕГЛЕД'}
                 </button>
               </div>
             </div>
-            {patient.patient_medications.length === 0 ? (
-              <p className="text-sm text-gray-500 italic mt-2">No current medications recorded.</p>
-            ) : (
-              <ul className="space-y-3 mt-2 flex-1">
-                {patient.patient_medications.map(med => (
-                  <li key={med.id} className="p-3 rounded-xl bg-white/5 border border-white/5 flex flex-col gap-1.5">
-                    <div className="flex justify-between items-start">
-                      <span className="font-medium text-gray-200">{med.drug_name}</span>
-                      <span className={`text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded flex-shrink-0 ${
-                        med.status === 'active' ? 'bg-cyan-500/20 text-cyan-400' : 'bg-gray-500/20 text-gray-400'
-                      }`}>
-                        {med.status}
-                      </span>
-                    </div>
-                    <div className="text-xs text-gray-500 flex flex-col">
-                      {med.dosage && <span>Dose: {med.dosage}</span>}
-                      {med.frequency && <span>Freq: {med.frequency}</span>}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
           </div>
 
-        </div>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
 
-        {/* Medical History (Appointments) */}
-        <div className="mt-8 bg-white/4 border border-white/8 rounded-2xl p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-              <svg className="w-5 h-5 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              Medical History
-            </h2>
-            <button className="text-sm font-medium text-cyan-400 hover:text-cyan-300 transition-colors">
-              View All
-            </button>
-          </div>
-          
-          {!patient.appointments || patient.appointments.length === 0 ? (
-            <div className="py-8 text-center border-2 border-dashed border-white/5 rounded-xl">
-              <p className="text-gray-500 text-sm">No past appointments found.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {/* Sort by newest first */}
-              {[...patient.appointments].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(appt => (
-                <div key={appt.id} className="flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors gap-4">
-                  <div className="flex items-start gap-4">
-                    <div className={`mt-1 w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-                      appt.status === 'completed' ? 'bg-green-500/10 text-green-400' :
-                      appt.status === 'pending' ? 'bg-blue-500/10 text-blue-400' : 'bg-gray-500/10 text-gray-400'
-                    }`}>
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
+            {/* Sidebar Column: Info & Meds */}
+            <div className="lg:col-span-5 flex flex-col gap-8">
+
+              {/* Contact Info Card */}
+              <div className="mp-card p-6">
+                <h3 className="text-xs font-bold text-mp-text-muted uppercase tracking-wider mb-4">Контактна информация</h3>
+                <div className="flex flex-col gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-mp-bg flex items-center justify-center text-mp-text-muted">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" /></svg>
                     </div>
-                    <div>
-                      <h3 className="text-white font-medium">
-                        {appt.status === 'completed' ? 'Completed Session' : 
-                         appt.status === 'pending' ? 'Upcoming Appointment' : 'Session'}
-                      </h3>
-                      <p className="text-sm text-gray-400 mt-0.5">
-                        {appt.started_at || appt.scheduled_at ? new Date(appt.started_at || appt.scheduled_at!).toLocaleString() : 'No date set'}
-                      </p>
-                    </div>
+                    <span className="font-semibold text-mp-text">{patient.phone || 'Няма телефон'}</span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md ${
-                      appt.status === 'completed' ? 'bg-green-500/20 text-green-400' :
-                      appt.status === 'pending' ? 'bg-blue-500/20 text-blue-400' : 'bg-gray-500/20 text-gray-400'
-                    }`}>
-                      {appt.status}
-                    </span>
-                    <button 
-                      onClick={() => handleDeleteAppointment(appt.id)}
-                      className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-all"
-                      title="Delete Record"
-                    >
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                      </svg>
-                    </button>
-                    <Link
-                      to="/session/results/$appointmentId"
-                      params={{ appointmentId: appt.id }}
-                      className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-xs font-medium text-white transition-colors border border-white/10"
-                    >
-                      Details
-                    </Link>
+                    <div className="w-9 h-9 rounded-lg bg-mp-bg flex items-center justify-center text-mp-text-muted">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><path d="m22 6-10 7L2 6" /></svg>
+                    </div>
+                    <span className="font-semibold text-mp-text truncate">{patient.email || 'Няма имейл'}</span>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+              </div>
 
-        {/* Session Recordings */}
-        <div className="mt-8 bg-white/4 border border-white/8 rounded-2xl p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-semibold text-white flex items-center gap-2">
-              <svg className="w-5 h-5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
-              </svg>
-              Session Recordings
-            </h2>
-            <span className="text-xs text-gray-500">
-              {patient.appointments?.reduce((acc, appt) => acc + (appt.recordings?.length || 0), 0) || 0} total
-            </span>
-          </div>
-
-          {(!patient.appointments || patient.appointments.every(appt => !appt.recordings || appt.recordings.length === 0)) ? (
-            <div className="py-8 text-center border-2 border-dashed border-white/5 rounded-xl">
-              <p className="text-gray-500 text-sm">No recordings found for this patient.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-3">
-              {(patient.appointments || [])
-                .flatMap(appt => (appt.recordings || []).map(rec => ({ ...rec, apptId: appt.id })))
-                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-                .map(rec => (
-                  <RecordingCard
-                    key={rec.id}
-                    name={rec.name}
-                    duration={rec.duration}
-                    size={rec.size}
-                    createdAt={rec.created_at}
-                    publicUrl={rec.publicUrl}
-                    appointmentId={rec.apptId}
-                    isAnalyzing={analyzingApptId === rec.apptId}
-                    onDelete={() => handleDeleteRecording(rec.id, rec.storage_path)}
-                    onRetry={async () => {
-                      setAnalyzingApptId(rec.apptId)
-                      const res = await doRetry({ data: { appointmentId: rec.apptId } })
-                      setAnalyzingApptId(null)
-                      if (res.error) alert(res.message)
-                      else {
-                        load()
-                        navigate({ to: '/session/results/$appointmentId', params: { appointmentId: rec.apptId } })
-                      }
-                    }}
-                  />
-                ))
-              }
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Prescribe Modal */}
-      {showMedModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-950/80 backdrop-blur-sm">
-          <div className="w-full max-w-lg bg-gray-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
-            <div className="p-5 border-b border-white/10 flex justify-between items-center">
-              <h3 className="text-lg font-bold text-white">Prescribe Medication</h3>
-              <button onClick={() => {
-                setShowMedModal(false)
-                setSelectedDrug(null)
-                setMedQuery('')
-              }} className="text-gray-400 hover:text-white transition">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-            
-            <div className="p-5 overflow-y-auto flex-1">
-              {!selectedDrug ? (
-                <>
-                  <input
-                    type="text"
-                    placeholder="Search catalogue (e.g. Amoxicillin)..."
-                    value={medQuery}
-                    onChange={(e) => setMedQuery(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl bg-black/40 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500 mb-4"
-                  />
-                  {medQuery && medResults.length === 0 ? (
-                    <p className="text-sm text-gray-500 text-center py-4">No drugs found.</p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {medResults.map(drug => (
-                        <li key={drug.id}>
-                          <button
-                            onClick={() => setSelectedDrug(drug)}
-                            className="w-full text-left p-3 rounded-xl hover:bg-white/5 border border-transparent hover:border-white/10 transition-colors"
-                          >
-                            <div className="font-medium text-white">{drug.product_name}</div>
-                            <div className="text-xs text-gray-400 mt-0.5">{drug.active_substance} • {drug.dosage_form}</div>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
+              <div className="mp-card p-6 relative">
+                <div className="flex items-center justify-between gap-4 mb-4">
+                  <h3 className="text-xs font-bold text-mp-text-muted uppercase tracking-wider">Допълнителни данни</h3>
+                  {!isEditingExtended && (
+                    <button onClick={() => setIsEditingExtended(true)} className="text-mp-green font-bold text-[10px] hover:underline shrink-0">РЕДАКТИРАЙ</button>
                   )}
-                </>
-              ) : (
-                <div className="space-y-4">
-                  <div className="p-4 rounded-xl bg-violet-500/10 border border-violet-500/20">
-                    <div className="text-sm text-violet-300 font-medium mb-1">Selected Drug</div>
-                    <div className="text-white font-bold">{selectedDrug.product_name}</div>
-                    <div className="text-xs text-gray-400">{selectedDrug.active_substance}</div>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">Dosage</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. 500mg"
-                      value={dosage}
-                      onChange={(e) => setDosage(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl bg-black/40 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">Frequency</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Twice daily after meals"
-                      value={frequency}
-                      onChange={(e) => setFrequency(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl bg-black/40 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-violet-500"
-                    />
-                  </div>
                 </div>
-              )}
+
+                {isEditingExtended ? (
+                  <div className="flex flex-col gap-3">
+                    <div>
+                      <label className="mp-label text-[10px]">ГРАЖДАНСТВО</label>
+                      <input value={extCitizenship} onChange={e => setExtCitizenship(e.target.value)} className="mp-input h-10 text-sm" placeholder="напр. Българско" />
+                    </div>
+                    <div>
+                      <label className="mp-label text-[10px]">АДРЕС</label>
+                      <input value={extAddress} onChange={e => setExtAddress(e.target.value)} className="mp-input h-10 text-sm" placeholder="Град, улица..." />
+                    </div>
+                    <div>
+                      <label className="mp-label text-[10px]">ЛИЧЕН ЛЕКАР</label>
+                      <input value={extGP} onChange={e => setExtGP(e.target.value)} className="mp-input h-10 text-sm" placeholder="Име на лекар" />
+                    </div>
+                    <div>
+                      <label className="mp-label text-[10px]">ОСИГУРИТЕЛЕН СТАТУС</label>
+                      <select value={extInsurance} onChange={e => setExtInsurance(e.target.value as any)} className="mp-input h-10 text-sm">
+                        <option value="insured">Осигурен</option>
+                        <option value="uninsured">Неосигурен</option>
+                        <option value="unknown">Неизвестно</option>
+                      </select>
+                    </div>
+                    <div className="flex gap-2 mt-2">
+                      <button onClick={handleSaveExtended} disabled={isSavingExt} className="mp-btn-primary flex-1 h-10 text-xs">{isSavingExt ? 'Запис...' : 'ЗАПАЗИ'}</button>
+                      <button onClick={() => setIsEditingExtended(false)} className="mp-btn-ghost flex-1 h-10 text-xs">ОТКАЗ</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-4">
+                    <div>
+                      <p className="text-[10px] font-bold text-mp-text-muted uppercase">Адрес</p>
+                      <p className="text-sm font-semibold text-mp-text mt-0.5">{extAddress || 'Не е посочен'}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-[10px] font-bold text-mp-text-muted uppercase">Гражданство</p>
+                        <p className="text-sm font-semibold text-mp-text mt-0.5">{extCitizenship || '—'}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-mp-text-muted uppercase">Осигурен</p>
+                        <div className="mt-1">
+                          {extInsurance === 'insured' ? <span className="mp-badge-ok">ДА</span> : extInsurance === 'uninsured' ? <span className="mp-badge-danger">НЕ</span> : <span className="text-mp-text-subtle text-xs">Неизвестно</span>}
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-mp-text-muted uppercase">Личен Лекар</p>
+                      <p className="text-sm font-semibold text-mp-text mt-0.5">{extGP || '—'}</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Medications Card */}
+              <div className="mp-card p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xs font-bold text-mp-text-muted uppercase tracking-wider">Текуща Терапия</h3>
+                  <button onClick={() => setShowMedModal(true)} className="w-8 h-8 rounded-lg bg-mp-green/10 text-mp-green flex items-center justify-center hover:bg-mp-green/20 transition-colors">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14" /></svg>
+                  </button>
+                </div>
+
+                {patient.medications && patient.medications.length > 0 ? (
+                  <div className="flex flex-col gap-3">
+                    {patient.medications.filter(m => m.status === 'active').map(med => (
+                      <div key={med.id} className="p-3 rounded-xl bg-mp-bg border border-mp-border/50">
+                        <p className="text-sm font-bold text-mp-text">{med.drug_name}</p>
+                        <div className="flex items-center gap-2 mt-1 text-xs text-mp-text-muted">
+                          <span className="font-medium text-mp-green-dark bg-mp-green-light px-1.5 py-0.5 rounded uppercase tracking-wider">Активно</span>
+                          {med.dosage && <span>{med.dosage}</span>}
+                          {med.frequency && <span>· {med.frequency}</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-4 text-center border-2 border-dashed border-mp-border rounded-xl">
+                    <p className="text-xs text-mp-text-subtle font-medium">Няма назначени лекарства</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Recordings Card */}
+              {/* <div className="mp-card p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xs font-bold text-mp-text-muted uppercase tracking-wider">Всички записи</h3>
+                  <span className="bg-mp-bg px-2 py-0.5 rounded-full text-[10px] text-mp-text-muted font-bold">{patient.recordings?.length || 0}</span>
+                </div>
+
+                <div className="flex flex-col gap-3 max-h-[400px] overflow-y-auto pr-1">
+                  {patient.recordings && patient.recordings.length > 0 ? (
+                    patient.recordings.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map(rec => (
+                      <RecordingCard
+                        key={rec.id}
+                        recording={rec}
+                        onDelete={() => handleDeleteRecording(rec.id, rec.storage_path)}
+                      />
+                    ))
+                  ) : (
+                    <div className="py-6 text-center border-2 border-dashed border-mp-border rounded-xl">
+                      <p className="text-[11px] text-mp-text-subtle font-medium">Няма открити записи</p>
+                    </div>
+                  )}
+                </div>
+              </div> */}
             </div>
 
-            <div className="p-5 border-t border-white/10 bg-black/20 flex gap-3 justify-end">
-              {selectedDrug && (
-                <button
-                  onClick={() => setSelectedDrug(null)}
-                  className="px-4 py-2 rounded-xl text-sm font-medium text-gray-300 hover:bg-white/5 transition"
-                >
-                  Back
-                </button>
+            {/* Main Column: Timeline / History */}
+            <div className="lg:col-span-7">
+              <h3 className="text-xs font-bold text-mp-text-muted uppercase tracking-wider mb-6 flex items-center gap-2">
+                История на посещенията
+                <span className="bg-mp-bg px-2 py-0.5 rounded-full text-[10px]">{patient.appointments?.length || 0}</span>
+              </h3>
+
+              {!patient.appointments || patient.appointments.length === 0 ? (
+                <div className="mp-card p-12 text-center bg-mp-card-2 border-dashed">
+                  <div className="w-16 h-16 rounded-full bg-mp-bg flex items-center justify-center mx-auto mb-4 text-mp-text-subtle">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  </div>
+                  <h4 className="text-lg font-bold text-mp-text mb-1">Няма предишни прегледи</h4>
+                  <p className="text-sm text-mp-text-muted max-w-xs mx-auto">Стартирайте първата си консултация с този пациент днес.</p>
+                </div>
+              ) : (
+                <div className="relative pl-8 before:content-[''] before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-mp-border">
+                  {patient.appointments.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map((appt, idx) => {
+                    const date = new Date(appt.created_at)
+                    return (
+                      <div key={appt.id} className="relative mb-8 last:mb-0">
+                        {/* Dot */}
+                        <div className={`absolute -left-[27px] top-1.5 w-[12px] h-[12px] rounded-full border-2 border-white ${idx === 0 ? 'bg-mp-green ring-4 ring-mp-green/10' : 'bg-mp-border'}`}></div>
+
+                        <div className="mp-card p-5 hover:shadow-md transition-shadow group">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <p className="text-[10px] font-bold text-mp-green-dark uppercase tracking-wide">
+                                {date.toLocaleDateString('bg-BG', { day: 'numeric', month: 'long', year: 'numeric' })}
+                              </p>
+                              <h4 className="text-base font-bold text-mp-text mt-1">Амбулаторен лист №{appt.id.slice(0, 6).toUpperCase()}</h4>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {appt.recordings?.length > 0 && (
+                                <span className="flex items-center gap-1 text-[10px] font-bold text-mp-danger bg-mp-danger-bg px-2 py-1 rounded">
+                                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3}><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" /><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4m-4 0h8" /></svg>
+                                  {appt.recordings.length} ЗАПИСА
+                                </span>
+                              )}
+                              <Link
+                                to="/session/$appointmentId/results"
+                                params={{ appointmentId: appt.id }}
+                                className="mp-btn-outline h-9 px-4 text-xs group-hover:bg-mp-green group-hover:text-white group-hover:border-mp-green transition-all no-underline inline-flex items-center"
+                              >
+                                ПРЕГЛЕД
+                              </Link>
+                            </div>
+                          </div>
+
+                          {/* Quick status chips */}
+                          <div className="flex flex-wrap gap-2 mt-4">
+                            <span className="text-[11px] font-semibold text-mp-text-muted bg-mp-bg px-2 py-0.5 rounded border border-mp-border/50">Преглед</span>
+                            {appt.status === 'completed' && <span className="text-[11px] font-semibold text-mp-green-dark bg-mp-green-light px-2 py-0.5 rounded">Завършен</span>}
+                            {appt.status === 'pending' && <span className="text-[11px] font-semibold text-mp-warn bg-mp-warn-bg px-2 py-0.5 rounded">В процес</span>}
+                          </div>
+
+                          {/* Recordings List */}
+                          {appt.recordings?.length > 0 && (
+                            <div className="mt-4 pt-4 border-t border-mp-border/50 flex flex-col gap-2">
+                              {appt.recordings.map((rec: any) => (
+                                <div key={rec.id} className="flex items-center justify-between p-2 rounded-lg bg-mp-bg/50">
+                                  <div className="flex items-center gap-2 overflow-hidden">
+                                    <svg className="text-mp-danger shrink-0" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" /><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4m-4 0h8" /></svg>
+                                    <span className="text-xs font-medium text-mp-text truncate">{rec.name}</span>
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-[10px] text-mp-text-subtle">{Math.round(rec.duration || 0)}s</span>
+                                    <button
+                                      onClick={() => handleDeleteRecording(rec.id, rec.storage_path)}
+                                      className="text-mp-text-subtle hover:text-mp-danger transition-colors"
+                                    >
+                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
               )}
-              <button
-                onClick={handlePrescribe}
-                disabled={!selectedDrug || savingMed}
-                className="px-6 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium transition disabled:opacity-50"
-              >
-                {savingMed ? 'Prescribing...' : 'Prescribe'}
-              </button>
+
+              {/* Recordings Section */}
+              <div className="mp-card p-8 mt-8">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-10 h-10 rounded-xl bg-mp-danger/10 text-mp-danger flex items-center justify-center">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" /><path d="M19 10v2a7 7 0 01-14 0v-2M12 19v4m-4 0h8" /></svg>
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold text-mp-text">Аудио записи</h2>
+                    <p className="text-sm text-mp-text-muted mt-0.5">Всички записи от консултации с този пациент.</p>
+                  </div>
+                </div>
+                <SessionRecordings patientId={patientId} />
+              </div>
             </div>
           </div>
         </div>
-      )}
+
+        {/* Medication Modal */}
+        {showMedModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-mp-text/40 backdrop-blur-sm">
+            <div className="mp-card w-full max-w-xl p-0 overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-200">
+              <div className="p-6 border-b border-mp-border bg-mp-bg/50 flex items-center justify-between">
+                <h2 className="text-xl font-bold text-mp-text">Предписване на лекарство</h2>
+                <button onClick={() => setShowMedModal(false)} className="text-mp-text-subtle hover:text-mp-text"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12" /></svg></button>
+              </div>
+              <div className="p-6 flex flex-col gap-5">
+                <div className="relative">
+                  <label className="mp-label mb-1.5">ПОТЪРСЕТЕ В КАТАЛОГА</label>
+                  <div className="relative">
+                    <input
+                      value={medQuery}
+                      onChange={e => setMedQuery(e.target.value)}
+                      placeholder="Име на лекарство или ATC код..."
+                      className="mp-input h-14 pl-12"
+                    />
+                    <svg className="absolute left-4 top-1/2 -translate-y-1/2 text-mp-text-subtle" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
+                  </div>
+
+                  {medResults.length > 0 && (
+                    <div className="absolute top-[100%] left-0 right-0 mt-2 bg-white border border-mp-border rounded-xl shadow-xl z-10 max-h-64 overflow-y-auto">
+                      {medResults.map(drug => (
+                        <button
+                          key={drug.id}
+                          onClick={() => { setSelectedDrug(drug); setMedResults([]) }}
+                          className="w-full text-left p-4 hover:bg-mp-bg border-b last:border-0 border-mp-border flex items-center justify-between"
+                        >
+                          <div>
+                            <p className="font-bold text-mp-text">{drug.product_name}</p>
+                            <p className="text-xs text-mp-text-muted mt-0.5">{drug.active_substance} · {drug.atc_code}</p>
+                          </div>
+                          <span className="text-[10px] font-bold text-mp-green-dark bg-mp-green-light px-2 py-1 rounded">ИЗБЕРИ</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {selectedDrug && (
+                  <div className="p-4 rounded-xl bg-mp-green-light border border-mp-green/20 animate-in slide-in-from-top-2 duration-200">
+                    <p className="text-xs font-bold text-mp-green-dark uppercase mb-1">ИЗБРАНО ЛЕКАРСТВО</p>
+                    <p className="text-lg font-bold text-mp-text leading-tight">{selectedDrug.product_name}</p>
+                    <p className="text-sm text-mp-text-muted mt-1">{selectedDrug.pharmaceutical_form}</p>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="mp-label mb-1.5">ДОЗИРОВКА</label>
+                    <input value={dosage} onChange={e => setDosage(e.target.value)} placeholder="напр. 500 мг" className="mp-input h-12" />
+                  </div>
+                  <div>
+                    <label className="mp-label mb-1.5">ЧЕСТОТА</label>
+                    <input value={frequency} onChange={e => setFrequency(e.target.value)} placeholder="напр. 2 пъти на ден" className="mp-input h-12" />
+                  </div>
+                </div>
+              </div>
+              <div className="p-6 border-t border-mp-border bg-mp-bg/30 flex gap-3">
+                <button
+                  onClick={handlePrescribe}
+                  disabled={!selectedDrug || savingMed}
+                  className="mp-btn-primary flex-1 h-12 text-sm font-bold"
+                >
+                  {savingMed ? 'ЗАПИСВАНЕ...' : 'ДОБАВИ КЪМ ТЕРАПИЯ'}
+                </button>
+                <button onClick={() => setShowMedModal(false)} className="mp-btn-ghost h-12 px-6 text-sm">ОТКАЗ</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div style={{ height: '4rem' }} />
+      </main>
     </div>
   )
 }

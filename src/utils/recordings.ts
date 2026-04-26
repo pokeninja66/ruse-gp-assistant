@@ -53,6 +53,7 @@ export const uploadRecordingFn = createServerFn({ method: 'POST' })
       duration: number
       size: number
       appointmentId?: string
+      patientId?: string
     }) => d,
   )
   .handler(
@@ -96,6 +97,9 @@ export const uploadRecordingFn = createServerFn({ method: 'POST' })
       
       if (data.appointmentId) {
         insertPayload.appointment_id = data.appointmentId
+      }
+      if (data.patientId) {
+        insertPayload.patient_id = data.patientId
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

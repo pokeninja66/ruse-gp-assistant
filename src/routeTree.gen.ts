@@ -22,7 +22,16 @@ import { Route as AuthedPatientsIndexRouteImport } from './routes/_authed/patien
 import { Route as AuthedSessionAppointmentIdRouteImport } from './routes/_authed/session.$appointmentId'
 import { Route as AuthedPostsPostIdRouteImport } from './routes/_authed/posts.$postId'
 import { Route as AuthedPatientsPatientIdRouteImport } from './routes/_authed/patients.$patientId'
-import { Route as AuthedSessionResultsAppointmentIdRouteImport } from './routes/_authed/session.results.$appointmentId'
+import { Route as AuthedSessionAppointmentIdTherapyRouteImport } from './routes/_authed/session.$appointmentId.therapy'
+import { Route as AuthedSessionAppointmentIdTestOrdersRouteImport } from './routes/_authed/session.$appointmentId.test-orders'
+import { Route as AuthedSessionAppointmentIdStatusRouteImport } from './routes/_authed/session.$appointmentId.status'
+import { Route as AuthedSessionAppointmentIdResultsRouteImport } from './routes/_authed/session.$appointmentId.results'
+import { Route as AuthedSessionAppointmentIdReferralRouteImport } from './routes/_authed/session.$appointmentId.referral'
+import { Route as AuthedSessionAppointmentIdPatientRouteImport } from './routes/_authed/session.$appointmentId.patient'
+import { Route as AuthedSessionAppointmentIdDocumentsRouteImport } from './routes/_authed/session.$appointmentId.documents'
+import { Route as AuthedSessionAppointmentIdDiagnosisRouteImport } from './routes/_authed/session.$appointmentId.diagnosis'
+import { Route as AuthedSessionAppointmentIdAnamnesisRouteImport } from './routes/_authed/session.$appointmentId.anamnesis'
+import { Route as AuthedPatientsPatientIdHistoryRouteImport } from './routes/_authed/patients.$patientId.history'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -89,11 +98,65 @@ const AuthedPatientsPatientIdRoute = AuthedPatientsPatientIdRouteImport.update({
   path: '/patients/$patientId',
   getParentRoute: () => AuthedRoute,
 } as any)
-const AuthedSessionResultsAppointmentIdRoute =
-  AuthedSessionResultsAppointmentIdRouteImport.update({
-    id: '/session/results/$appointmentId',
-    path: '/session/results/$appointmentId',
-    getParentRoute: () => AuthedRoute,
+const AuthedSessionAppointmentIdTherapyRoute =
+  AuthedSessionAppointmentIdTherapyRouteImport.update({
+    id: '/therapy',
+    path: '/therapy',
+    getParentRoute: () => AuthedSessionAppointmentIdRoute,
+  } as any)
+const AuthedSessionAppointmentIdTestOrdersRoute =
+  AuthedSessionAppointmentIdTestOrdersRouteImport.update({
+    id: '/test-orders',
+    path: '/test-orders',
+    getParentRoute: () => AuthedSessionAppointmentIdRoute,
+  } as any)
+const AuthedSessionAppointmentIdStatusRoute =
+  AuthedSessionAppointmentIdStatusRouteImport.update({
+    id: '/status',
+    path: '/status',
+    getParentRoute: () => AuthedSessionAppointmentIdRoute,
+  } as any)
+const AuthedSessionAppointmentIdResultsRoute =
+  AuthedSessionAppointmentIdResultsRouteImport.update({
+    id: '/results',
+    path: '/results',
+    getParentRoute: () => AuthedSessionAppointmentIdRoute,
+  } as any)
+const AuthedSessionAppointmentIdReferralRoute =
+  AuthedSessionAppointmentIdReferralRouteImport.update({
+    id: '/referral',
+    path: '/referral',
+    getParentRoute: () => AuthedSessionAppointmentIdRoute,
+  } as any)
+const AuthedSessionAppointmentIdPatientRoute =
+  AuthedSessionAppointmentIdPatientRouteImport.update({
+    id: '/patient',
+    path: '/patient',
+    getParentRoute: () => AuthedSessionAppointmentIdRoute,
+  } as any)
+const AuthedSessionAppointmentIdDocumentsRoute =
+  AuthedSessionAppointmentIdDocumentsRouteImport.update({
+    id: '/documents',
+    path: '/documents',
+    getParentRoute: () => AuthedSessionAppointmentIdRoute,
+  } as any)
+const AuthedSessionAppointmentIdDiagnosisRoute =
+  AuthedSessionAppointmentIdDiagnosisRouteImport.update({
+    id: '/diagnosis',
+    path: '/diagnosis',
+    getParentRoute: () => AuthedSessionAppointmentIdRoute,
+  } as any)
+const AuthedSessionAppointmentIdAnamnesisRoute =
+  AuthedSessionAppointmentIdAnamnesisRouteImport.update({
+    id: '/anamnesis',
+    path: '/anamnesis',
+    getParentRoute: () => AuthedSessionAppointmentIdRoute,
+  } as any)
+const AuthedPatientsPatientIdHistoryRoute =
+  AuthedPatientsPatientIdHistoryRouteImport.update({
+    id: '/history',
+    path: '/history',
+    getParentRoute: () => AuthedPatientsPatientIdRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -104,12 +167,21 @@ export interface FileRoutesByFullPath {
   '/drugs': typeof AuthedDrugsRoute
   '/posts': typeof AuthedPostsRouteWithChildren
   '/recordings': typeof AuthedRecordingsRoute
-  '/patients/$patientId': typeof AuthedPatientsPatientIdRoute
+  '/patients/$patientId': typeof AuthedPatientsPatientIdRouteWithChildren
   '/posts/$postId': typeof AuthedPostsPostIdRoute
-  '/session/$appointmentId': typeof AuthedSessionAppointmentIdRoute
+  '/session/$appointmentId': typeof AuthedSessionAppointmentIdRouteWithChildren
   '/patients/': typeof AuthedPatientsIndexRoute
   '/posts/': typeof AuthedPostsIndexRoute
-  '/session/results/$appointmentId': typeof AuthedSessionResultsAppointmentIdRoute
+  '/patients/$patientId/history': typeof AuthedPatientsPatientIdHistoryRoute
+  '/session/$appointmentId/anamnesis': typeof AuthedSessionAppointmentIdAnamnesisRoute
+  '/session/$appointmentId/diagnosis': typeof AuthedSessionAppointmentIdDiagnosisRoute
+  '/session/$appointmentId/documents': typeof AuthedSessionAppointmentIdDocumentsRoute
+  '/session/$appointmentId/patient': typeof AuthedSessionAppointmentIdPatientRoute
+  '/session/$appointmentId/referral': typeof AuthedSessionAppointmentIdReferralRoute
+  '/session/$appointmentId/results': typeof AuthedSessionAppointmentIdResultsRoute
+  '/session/$appointmentId/status': typeof AuthedSessionAppointmentIdStatusRoute
+  '/session/$appointmentId/test-orders': typeof AuthedSessionAppointmentIdTestOrdersRoute
+  '/session/$appointmentId/therapy': typeof AuthedSessionAppointmentIdTherapyRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -118,12 +190,21 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/drugs': typeof AuthedDrugsRoute
   '/recordings': typeof AuthedRecordingsRoute
-  '/patients/$patientId': typeof AuthedPatientsPatientIdRoute
+  '/patients/$patientId': typeof AuthedPatientsPatientIdRouteWithChildren
   '/posts/$postId': typeof AuthedPostsPostIdRoute
-  '/session/$appointmentId': typeof AuthedSessionAppointmentIdRoute
+  '/session/$appointmentId': typeof AuthedSessionAppointmentIdRouteWithChildren
   '/patients': typeof AuthedPatientsIndexRoute
   '/posts': typeof AuthedPostsIndexRoute
-  '/session/results/$appointmentId': typeof AuthedSessionResultsAppointmentIdRoute
+  '/patients/$patientId/history': typeof AuthedPatientsPatientIdHistoryRoute
+  '/session/$appointmentId/anamnesis': typeof AuthedSessionAppointmentIdAnamnesisRoute
+  '/session/$appointmentId/diagnosis': typeof AuthedSessionAppointmentIdDiagnosisRoute
+  '/session/$appointmentId/documents': typeof AuthedSessionAppointmentIdDocumentsRoute
+  '/session/$appointmentId/patient': typeof AuthedSessionAppointmentIdPatientRoute
+  '/session/$appointmentId/referral': typeof AuthedSessionAppointmentIdReferralRoute
+  '/session/$appointmentId/results': typeof AuthedSessionAppointmentIdResultsRoute
+  '/session/$appointmentId/status': typeof AuthedSessionAppointmentIdStatusRoute
+  '/session/$appointmentId/test-orders': typeof AuthedSessionAppointmentIdTestOrdersRoute
+  '/session/$appointmentId/therapy': typeof AuthedSessionAppointmentIdTherapyRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -135,12 +216,21 @@ export interface FileRoutesById {
   '/_authed/drugs': typeof AuthedDrugsRoute
   '/_authed/posts': typeof AuthedPostsRouteWithChildren
   '/_authed/recordings': typeof AuthedRecordingsRoute
-  '/_authed/patients/$patientId': typeof AuthedPatientsPatientIdRoute
+  '/_authed/patients/$patientId': typeof AuthedPatientsPatientIdRouteWithChildren
   '/_authed/posts/$postId': typeof AuthedPostsPostIdRoute
-  '/_authed/session/$appointmentId': typeof AuthedSessionAppointmentIdRoute
+  '/_authed/session/$appointmentId': typeof AuthedSessionAppointmentIdRouteWithChildren
   '/_authed/patients/': typeof AuthedPatientsIndexRoute
   '/_authed/posts/': typeof AuthedPostsIndexRoute
-  '/_authed/session/results/$appointmentId': typeof AuthedSessionResultsAppointmentIdRoute
+  '/_authed/patients/$patientId/history': typeof AuthedPatientsPatientIdHistoryRoute
+  '/_authed/session/$appointmentId/anamnesis': typeof AuthedSessionAppointmentIdAnamnesisRoute
+  '/_authed/session/$appointmentId/diagnosis': typeof AuthedSessionAppointmentIdDiagnosisRoute
+  '/_authed/session/$appointmentId/documents': typeof AuthedSessionAppointmentIdDocumentsRoute
+  '/_authed/session/$appointmentId/patient': typeof AuthedSessionAppointmentIdPatientRoute
+  '/_authed/session/$appointmentId/referral': typeof AuthedSessionAppointmentIdReferralRoute
+  '/_authed/session/$appointmentId/results': typeof AuthedSessionAppointmentIdResultsRoute
+  '/_authed/session/$appointmentId/status': typeof AuthedSessionAppointmentIdStatusRoute
+  '/_authed/session/$appointmentId/test-orders': typeof AuthedSessionAppointmentIdTestOrdersRoute
+  '/_authed/session/$appointmentId/therapy': typeof AuthedSessionAppointmentIdTherapyRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -157,7 +247,16 @@ export interface FileRouteTypes {
     | '/session/$appointmentId'
     | '/patients/'
     | '/posts/'
-    | '/session/results/$appointmentId'
+    | '/patients/$patientId/history'
+    | '/session/$appointmentId/anamnesis'
+    | '/session/$appointmentId/diagnosis'
+    | '/session/$appointmentId/documents'
+    | '/session/$appointmentId/patient'
+    | '/session/$appointmentId/referral'
+    | '/session/$appointmentId/results'
+    | '/session/$appointmentId/status'
+    | '/session/$appointmentId/test-orders'
+    | '/session/$appointmentId/therapy'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -171,7 +270,16 @@ export interface FileRouteTypes {
     | '/session/$appointmentId'
     | '/patients'
     | '/posts'
-    | '/session/results/$appointmentId'
+    | '/patients/$patientId/history'
+    | '/session/$appointmentId/anamnesis'
+    | '/session/$appointmentId/diagnosis'
+    | '/session/$appointmentId/documents'
+    | '/session/$appointmentId/patient'
+    | '/session/$appointmentId/referral'
+    | '/session/$appointmentId/results'
+    | '/session/$appointmentId/status'
+    | '/session/$appointmentId/test-orders'
+    | '/session/$appointmentId/therapy'
   id:
     | '__root__'
     | '/'
@@ -187,7 +295,16 @@ export interface FileRouteTypes {
     | '/_authed/session/$appointmentId'
     | '/_authed/patients/'
     | '/_authed/posts/'
-    | '/_authed/session/results/$appointmentId'
+    | '/_authed/patients/$patientId/history'
+    | '/_authed/session/$appointmentId/anamnesis'
+    | '/_authed/session/$appointmentId/diagnosis'
+    | '/_authed/session/$appointmentId/documents'
+    | '/_authed/session/$appointmentId/patient'
+    | '/_authed/session/$appointmentId/referral'
+    | '/_authed/session/$appointmentId/results'
+    | '/_authed/session/$appointmentId/status'
+    | '/_authed/session/$appointmentId/test-orders'
+    | '/_authed/session/$appointmentId/therapy'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -291,12 +408,75 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedPatientsPatientIdRouteImport
       parentRoute: typeof AuthedRoute
     }
-    '/_authed/session/results/$appointmentId': {
-      id: '/_authed/session/results/$appointmentId'
-      path: '/session/results/$appointmentId'
-      fullPath: '/session/results/$appointmentId'
-      preLoaderRoute: typeof AuthedSessionResultsAppointmentIdRouteImport
-      parentRoute: typeof AuthedRoute
+    '/_authed/session/$appointmentId/therapy': {
+      id: '/_authed/session/$appointmentId/therapy'
+      path: '/therapy'
+      fullPath: '/session/$appointmentId/therapy'
+      preLoaderRoute: typeof AuthedSessionAppointmentIdTherapyRouteImport
+      parentRoute: typeof AuthedSessionAppointmentIdRoute
+    }
+    '/_authed/session/$appointmentId/test-orders': {
+      id: '/_authed/session/$appointmentId/test-orders'
+      path: '/test-orders'
+      fullPath: '/session/$appointmentId/test-orders'
+      preLoaderRoute: typeof AuthedSessionAppointmentIdTestOrdersRouteImport
+      parentRoute: typeof AuthedSessionAppointmentIdRoute
+    }
+    '/_authed/session/$appointmentId/status': {
+      id: '/_authed/session/$appointmentId/status'
+      path: '/status'
+      fullPath: '/session/$appointmentId/status'
+      preLoaderRoute: typeof AuthedSessionAppointmentIdStatusRouteImport
+      parentRoute: typeof AuthedSessionAppointmentIdRoute
+    }
+    '/_authed/session/$appointmentId/results': {
+      id: '/_authed/session/$appointmentId/results'
+      path: '/results'
+      fullPath: '/session/$appointmentId/results'
+      preLoaderRoute: typeof AuthedSessionAppointmentIdResultsRouteImport
+      parentRoute: typeof AuthedSessionAppointmentIdRoute
+    }
+    '/_authed/session/$appointmentId/referral': {
+      id: '/_authed/session/$appointmentId/referral'
+      path: '/referral'
+      fullPath: '/session/$appointmentId/referral'
+      preLoaderRoute: typeof AuthedSessionAppointmentIdReferralRouteImport
+      parentRoute: typeof AuthedSessionAppointmentIdRoute
+    }
+    '/_authed/session/$appointmentId/patient': {
+      id: '/_authed/session/$appointmentId/patient'
+      path: '/patient'
+      fullPath: '/session/$appointmentId/patient'
+      preLoaderRoute: typeof AuthedSessionAppointmentIdPatientRouteImport
+      parentRoute: typeof AuthedSessionAppointmentIdRoute
+    }
+    '/_authed/session/$appointmentId/documents': {
+      id: '/_authed/session/$appointmentId/documents'
+      path: '/documents'
+      fullPath: '/session/$appointmentId/documents'
+      preLoaderRoute: typeof AuthedSessionAppointmentIdDocumentsRouteImport
+      parentRoute: typeof AuthedSessionAppointmentIdRoute
+    }
+    '/_authed/session/$appointmentId/diagnosis': {
+      id: '/_authed/session/$appointmentId/diagnosis'
+      path: '/diagnosis'
+      fullPath: '/session/$appointmentId/diagnosis'
+      preLoaderRoute: typeof AuthedSessionAppointmentIdDiagnosisRouteImport
+      parentRoute: typeof AuthedSessionAppointmentIdRoute
+    }
+    '/_authed/session/$appointmentId/anamnesis': {
+      id: '/_authed/session/$appointmentId/anamnesis'
+      path: '/anamnesis'
+      fullPath: '/session/$appointmentId/anamnesis'
+      preLoaderRoute: typeof AuthedSessionAppointmentIdAnamnesisRouteImport
+      parentRoute: typeof AuthedSessionAppointmentIdRoute
+    }
+    '/_authed/patients/$patientId/history': {
+      id: '/_authed/patients/$patientId/history'
+      path: '/history'
+      fullPath: '/patients/$patientId/history'
+      preLoaderRoute: typeof AuthedPatientsPatientIdHistoryRouteImport
+      parentRoute: typeof AuthedPatientsPatientIdRoute
     }
   }
 }
@@ -315,25 +495,75 @@ const AuthedPostsRouteWithChildren = AuthedPostsRoute._addFileChildren(
   AuthedPostsRouteChildren,
 )
 
+interface AuthedPatientsPatientIdRouteChildren {
+  AuthedPatientsPatientIdHistoryRoute: typeof AuthedPatientsPatientIdHistoryRoute
+}
+
+const AuthedPatientsPatientIdRouteChildren: AuthedPatientsPatientIdRouteChildren =
+  {
+    AuthedPatientsPatientIdHistoryRoute: AuthedPatientsPatientIdHistoryRoute,
+  }
+
+const AuthedPatientsPatientIdRouteWithChildren =
+  AuthedPatientsPatientIdRoute._addFileChildren(
+    AuthedPatientsPatientIdRouteChildren,
+  )
+
+interface AuthedSessionAppointmentIdRouteChildren {
+  AuthedSessionAppointmentIdAnamnesisRoute: typeof AuthedSessionAppointmentIdAnamnesisRoute
+  AuthedSessionAppointmentIdDiagnosisRoute: typeof AuthedSessionAppointmentIdDiagnosisRoute
+  AuthedSessionAppointmentIdDocumentsRoute: typeof AuthedSessionAppointmentIdDocumentsRoute
+  AuthedSessionAppointmentIdPatientRoute: typeof AuthedSessionAppointmentIdPatientRoute
+  AuthedSessionAppointmentIdReferralRoute: typeof AuthedSessionAppointmentIdReferralRoute
+  AuthedSessionAppointmentIdResultsRoute: typeof AuthedSessionAppointmentIdResultsRoute
+  AuthedSessionAppointmentIdStatusRoute: typeof AuthedSessionAppointmentIdStatusRoute
+  AuthedSessionAppointmentIdTestOrdersRoute: typeof AuthedSessionAppointmentIdTestOrdersRoute
+  AuthedSessionAppointmentIdTherapyRoute: typeof AuthedSessionAppointmentIdTherapyRoute
+}
+
+const AuthedSessionAppointmentIdRouteChildren: AuthedSessionAppointmentIdRouteChildren =
+  {
+    AuthedSessionAppointmentIdAnamnesisRoute:
+      AuthedSessionAppointmentIdAnamnesisRoute,
+    AuthedSessionAppointmentIdDiagnosisRoute:
+      AuthedSessionAppointmentIdDiagnosisRoute,
+    AuthedSessionAppointmentIdDocumentsRoute:
+      AuthedSessionAppointmentIdDocumentsRoute,
+    AuthedSessionAppointmentIdPatientRoute:
+      AuthedSessionAppointmentIdPatientRoute,
+    AuthedSessionAppointmentIdReferralRoute:
+      AuthedSessionAppointmentIdReferralRoute,
+    AuthedSessionAppointmentIdResultsRoute:
+      AuthedSessionAppointmentIdResultsRoute,
+    AuthedSessionAppointmentIdStatusRoute:
+      AuthedSessionAppointmentIdStatusRoute,
+    AuthedSessionAppointmentIdTestOrdersRoute:
+      AuthedSessionAppointmentIdTestOrdersRoute,
+    AuthedSessionAppointmentIdTherapyRoute:
+      AuthedSessionAppointmentIdTherapyRoute,
+  }
+
+const AuthedSessionAppointmentIdRouteWithChildren =
+  AuthedSessionAppointmentIdRoute._addFileChildren(
+    AuthedSessionAppointmentIdRouteChildren,
+  )
+
 interface AuthedRouteChildren {
   AuthedDrugsRoute: typeof AuthedDrugsRoute
   AuthedPostsRoute: typeof AuthedPostsRouteWithChildren
   AuthedRecordingsRoute: typeof AuthedRecordingsRoute
-  AuthedPatientsPatientIdRoute: typeof AuthedPatientsPatientIdRoute
-  AuthedSessionAppointmentIdRoute: typeof AuthedSessionAppointmentIdRoute
+  AuthedPatientsPatientIdRoute: typeof AuthedPatientsPatientIdRouteWithChildren
+  AuthedSessionAppointmentIdRoute: typeof AuthedSessionAppointmentIdRouteWithChildren
   AuthedPatientsIndexRoute: typeof AuthedPatientsIndexRoute
-  AuthedSessionResultsAppointmentIdRoute: typeof AuthedSessionResultsAppointmentIdRoute
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedDrugsRoute: AuthedDrugsRoute,
   AuthedPostsRoute: AuthedPostsRouteWithChildren,
   AuthedRecordingsRoute: AuthedRecordingsRoute,
-  AuthedPatientsPatientIdRoute: AuthedPatientsPatientIdRoute,
-  AuthedSessionAppointmentIdRoute: AuthedSessionAppointmentIdRoute,
+  AuthedPatientsPatientIdRoute: AuthedPatientsPatientIdRouteWithChildren,
+  AuthedSessionAppointmentIdRoute: AuthedSessionAppointmentIdRouteWithChildren,
   AuthedPatientsIndexRoute: AuthedPatientsIndexRoute,
-  AuthedSessionResultsAppointmentIdRoute:
-    AuthedSessionResultsAppointmentIdRoute,
 }
 
 const AuthedRouteWithChildren =

@@ -1,20 +1,20 @@
 node_modules
-# Keep environment variables out of version control
-!.env
-package-lock.json
-yarn.lock
-
-.DS_Store
-.cache
 .env
-.vercel
+.env.*
+!.env.example
+dist
 .output
+.cache
+.vercel
 /build/
 /api/
 /server/build
-/public/build# Sentry Config File
-.env.sentry-build-plugin
+/public/build
 /test-results/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+.DS_Store
+package-lock.json
+yarn.lock
+v2_design

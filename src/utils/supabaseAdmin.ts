@@ -11,8 +11,8 @@ let _adminClient: ReturnType<typeof createClient> | null = null
 export function getSupabaseAdminClient() {
   if (_adminClient) return _adminClient
 
-  const url = (import.meta.env.VITE_SUPABASE_URL || process.env.VITE_SUPABASE_URL) as string
-  const serviceRoleKey = (import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY) as string
+  const url = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_URL) || process.env.VITE_SUPABASE_URL as string
+  const serviceRoleKey = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_SERVICE_ROLE_KEY) || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY as string
 
   if (!url) throw new Error('Missing VITE_SUPABASE_URL')
   if (!serviceRoleKey) {

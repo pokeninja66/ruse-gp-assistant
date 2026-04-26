@@ -8,13 +8,18 @@ import {
   deletePatientFn,
   quickAddDevPatientFn,
   type Patient,
+  type PatientExtendedInfo,
 } from '../../utils/patients'
+import { AppSidebar } from '../../components/AppSidebar'
+import { logoutFn } from '../logout'
 
 export const Route = createFileRoute('/_authed/patients/')({
   component: PatientsPage,
 })
 
 function PatientsPage() {
+  const { user } = Route.useRouteContext()
+  const doLogout = useServerFn(logoutFn)
   const doList = useServerFn(listPatientsFn)
   const doCreate = useServerFn(createPatientFn)
   const doUpdate = useServerFn(updatePatientFn)
@@ -22,9 +27,10 @@ function PatientsPage() {
   const doQuickAdd = useServerFn(quickAddDevPatientFn)
   const navigate = useNavigate()
 
-  const [patients, setPatients] = React.useState<Patient[]>([])
+  const [patients, setPatients] = React.useState<(Patient & { extended_info?: PatientExtendedInfo[] })[]>([])
   const [loading, setLoading] = React.useState(true)
   const [addingDev, setAddingDev] = React.useState(false)
+  const [searchQuery, setSearchQuery] = React.useState('')
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = React.useState(false)
@@ -93,297 +99,229 @@ function PatientsPage() {
         const { error } = await doUpdate({
           data: { id: editingPatient.id, first_name: firstName, last_name: lastName, dob, gender, phone, email },
         })
-        if (!error) {
-          await loadPatients()
-          closeModal()
-        }
+        if (!error) closeModal()
       } else {
         const { error } = await doCreate({
           data: { first_name: firstName, last_name: lastName, dob, gender, phone, email },
         })
-        if (!error) {
-          await loadPatients()
-          closeModal()
-        }
+        if (!error) closeModal()
       }
+      await loadPatients()
     } finally {
       setIsSubmitting(false)
     }
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this patient?')) return
+    if (!window.confirm('Наистина ли искате да изтриете този пациент?')) return
     await doDelete({ data: { id } })
     setPatients((prev) => prev.filter((p) => p.id !== id))
   }
 
+  const filteredPatients = patients.filter(p => 
+    `${p.first_name} ${p.last_name}`.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    p.phone?.includes(searchQuery) ||
+    p.email?.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
+  const calculateAge = (dobString: string) => {
+    const birthday = new Date(dobString)
+    const ageDifMs = Date.now() - birthday.getTime()
+    const ageDate = new Date(ageDifMs)
+    return Math.abs(ageDate.getUTCFullYear() - 1970)
+  }
+
   return (
-    <div className="min-h-[calc(100dvh-3.5rem)] bg-gray-950 relative">
-      {/* Ambient background */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden -z-0">
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-violet-600/8 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 right-0 w-96 h-96 bg-cyan-600/6 rounded-full blur-3xl" />
-      </div>
-
-      <div className="relative z-10 max-w-5xl mx-auto px-4 py-10">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-2xl font-bold text-white tracking-tight">Patients</h1>
-            <p className="text-sm text-gray-500 mt-1">
-              Manage your patient records securely
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleQuickAdd}
-              disabled={addingDev}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-300 text-sm font-medium transition-all border border-white/10 disabled:opacity-50"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-              {addingDev ? 'Adding...' : 'Dev: Quick Add'}
-            </button>
-            <button
-              onClick={openNewModal}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 text-white text-sm font-medium transition-all shadow-lg shadow-violet-500/20"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-              </svg>
-              Add Patient
-            </button>
-          </div>
-        </div>
-
-        {/* List */}
-        <div className="bg-white/4 border border-white/8 rounded-2xl overflow-hidden">
-          {loading ? (
-            <div className="flex justify-center items-center py-16">
-              <svg className="animate-spin w-6 h-6 text-violet-400" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-              </svg>
+    <div className="mp-layout">
+      <AppSidebar user={user} onLogout={() => doLogout().then(() => navigate({ to: '/login' }))} />
+      <main className="mp-main">
+        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+          
+          {/* Header */}
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
+            <div>
+              <h1 className="text-4xl font-extrabold text-mp-text tracking-tight">Пациенти</h1>
+              <p className="text-mp-text-muted mt-2 text-lg font-medium">Търсете и управлявайте електронните досиета на Вашите пациенти.</p>
             </div>
-          ) : patients.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="w-14 h-14 rounded-2xl bg-white/4 border border-white/8 flex items-center justify-center mb-4">
-                <svg className="w-6 h-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
-                </svg>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleQuickAdd}
+                disabled={addingDev}
+                className="mp-btn-ghost h-12 px-5 text-sm"
+              >
+                {addingDev ? 'Добавяне...' : 'Dev: Бързо добавяне'}
+              </button>
+              <button
+                onClick={openNewModal}
+                className="mp-btn-primary h-12 px-6 shadow-lg shadow-mp-green/20"
+              >
+                + НОВ ПАЦИЕНТ
+              </button>
+            </div>
+          </div>
+
+          {/* Search Bar */}
+          <div className="mp-card p-4 mb-8 flex items-center gap-4">
+            <div className="relative flex-1">
+              <svg className="absolute left-4 top-1/2 -translate-y-1/2 text-mp-text-subtle" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              <input 
+                type="text" 
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Търсене по име, телефон или имейл..." 
+                className="mp-input pl-12 h-12 text-base"
+              />
+            </div>
+          </div>
+
+          {/* List */}
+          {loading ? (
+            <div className="flex justify-center items-center py-24">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-mp-green"></div>
+            </div>
+          ) : filteredPatients.length === 0 ? (
+            <div className="mp-card p-20 text-center border-dashed">
+              <div className="w-16 h-16 rounded-full bg-mp-bg flex items-center justify-center mx-auto mb-4 text-mp-text-subtle">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}><path d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" /></svg>
               </div>
-              <p className="text-gray-500 text-sm">No patients found</p>
-              <p className="text-gray-600 text-xs mt-1">Add your first patient to get started</p>
+              <h3 className="text-xl font-bold text-mp-text">Няма намерени пациенти</h3>
+              <p className="text-mp-text-muted mt-2">Добавете нов пациент или коригирайте критериите за търсене.</p>
+              <button onClick={openNewModal} className="mp-btn-primary mt-6 px-8">ДОБАВИ ПЪРВИ ПАЦИЕНТ</button>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-white/10 bg-white/5 text-xs text-gray-400 uppercase tracking-wider">
-                    <th className="px-6 py-4 font-medium">Name</th>
-                    <th className="px-6 py-4 font-medium">DOB</th>
-                    <th className="px-6 py-4 font-medium">Gender</th>
-                    <th className="px-6 py-4 font-medium">Contact</th>
-                    <th className="px-6 py-4 font-medium text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/10">
-                  {patients.map((patient) => (
-                    <tr 
-                      key={patient.id} 
-                      className="group hover:bg-white/5 transition-colors cursor-pointer"
-                      onClick={(e) => {
-                        // Prevent navigation if clicking on actions
-                        if ((e.target as HTMLElement).closest('.actions-cell')) return;
-                        navigate({ to: '/patients/$patientId', params: { patientId: patient.id } })
-                      }}
-                    >
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-600/50 to-cyan-600/50 flex items-center justify-center text-xs font-bold text-white uppercase border border-white/10">
-                            {patient.first_name[0]}{patient.last_name[0]}
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-white">{patient.first_name} {patient.last_name}</p>
-                            <p className="text-xs text-gray-500">ID: {patient.id.slice(0, 8)}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-300">
-                        {new Date(patient.dob).toLocaleDateString()}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-white/10 text-gray-300 capitalize">
-                          {patient.gender}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {filteredPatients.map((patient) => (
+                <div 
+                  key={patient.id} 
+                  className="mp-card p-6 hover:shadow-xl hover:border-mp-green/30 transition-all cursor-pointer group flex flex-col justify-between"
+                  onClick={() => navigate({ to: '/patients/$patientId', params: { patientId: patient.id } })}
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-14 h-14 rounded-2xl bg-mp-green-light text-mp-green flex items-center justify-center text-xl font-bold">
+                        {patient.first_name[0]}{patient.last_name[0]}
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-bold text-mp-text group-hover:text-mp-green transition-colors leading-tight">
+                          {patient.first_name} {patient.last_name}
+                        </h3>
+                        <p className="text-sm text-mp-text-muted mt-0.5">{calculateAge(patient.dob)} г. · {patient.gender === 'male' ? 'Мъж' : 'Жена'}</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2.5 mb-6">
+                    <div className="flex items-center gap-2.5 text-mp-text-subtle">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                      <span className="text-xs font-semibold">{patient.phone || 'Няма телефон'}</span>
+                    </div>
+                    <div className="flex items-center gap-2.5 text-mp-text-subtle">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><path d="m22 6-10 7L2 6"/></svg>
+                      <span className="text-xs font-semibold truncate">{patient.email || 'Няма имейл'}</span>
+                    </div>
+                    {patient.extended_info && patient.extended_info.length > 0 && (
+                      <div className="flex items-center gap-2.5 text-mp-text-subtle">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                        <span className="text-xs font-semibold truncate text-mp-green-dark">
+                          {patient.extended_info[0].address || 'Няма адрес'}
                         </span>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-400">
-                        <div className="flex flex-col gap-1">
-                          {patient.email && <span>{patient.email}</span>}
-                          {patient.phone && <span>{patient.phone}</span>}
-                          {!patient.email && !patient.phone && <span className="text-gray-600 italic">None</span>}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-right actions-cell">
-                        <div className="flex items-center justify-end gap-2 transition-opacity">
-                          <Link
-                            to="/patients/$patientId"
-                            params={{ patientId: patient.id }}
-                            className="p-1.5 rounded-lg text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 transition-colors bg-cyan-500/5"
-                            title="View Profile"
-                          >
-                            <span className="sr-only">View</span>
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                          </Link>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openEditModal(patient);
-                            }}
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors"
-                            title="Edit"
-                          >
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
-                            </svg>
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDelete(patient.id);
-                            }}
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                            title="Delete"
-                          >
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                            </svg>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-4 border-t border-mp-border/50">
+                    <div className="flex items-center gap-2 relative z-10">
+                      <button
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); openEditModal(patient) }}
+                        className="w-10 h-10 flex items-center justify-center rounded-xl text-mp-text-subtle hover:text-mp-green hover:bg-mp-green-light transition-all active:scale-90"
+                        title="Редактиране"
+                      >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      </button>
+                      <button
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(patient.id) }}
+                        className="w-10 h-10 flex items-center justify-center rounded-xl text-mp-text-subtle hover:text-mp-danger hover:bg-mp-danger-bg transition-all active:scale-90"
+                        title="Изтриване"
+                      >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                      </button>
+                    </div>
+                    <Link 
+                      to="/patients/$patientId" 
+                      params={{ patientId: patient.id }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-xs font-bold text-mp-green tracking-wide hover:underline relative z-10"
+                    >
+                      ПЪЛНО ДОСИЕ →
+                    </Link>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
-      </div>
 
-      {/* Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-gray-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
-            <div className="p-6 border-b border-white/10 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-white">
-                {editingPatient ? 'Edit Patient' : 'Add New Patient'}
-              </h2>
-              <button
-                onClick={closeModal}
-                className="p-1 rounded-lg text-gray-500 hover:text-white hover:bg-white/10 transition-colors"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            
-            <form onSubmit={handleSubmit} className="p-6">
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+        {/* Modal */}
+        {isModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-mp-text/40 backdrop-blur-sm">
+            <div className="w-full max-w-lg mp-card p-0 shadow-2xl animate-in zoom-in duration-200">
+              <div className="p-6 border-b border-mp-border flex items-center justify-between bg-mp-bg/50">
+                <h2 className="text-xl font-bold text-mp-text">
+                  {editingPatient ? 'Редактиране на пациент' : 'Нов пациент'}
+                </h2>
+                <button onClick={closeModal} className="p-2 rounded-lg text-mp-text-subtle hover:text-mp-text hover:bg-mp-bg transition-colors">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
+              </div>
+              
+              <form onSubmit={handleSubmit} className="p-8">
+                <div className="grid grid-cols-2 gap-6 mb-6">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-gray-400">First Name</label>
-                    <input
-                      required
-                      type="text"
-                      value={firstName}
-                      onChange={e => setFirstName(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-gray-800 border border-white/10 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
-                    />
+                    <label className="mp-label">ИМЕ</label>
+                    <input required value={firstName} onChange={e => setFirstName(e.target.value)} className="mp-input h-12" placeholder="напр. Иван" />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-gray-400">Last Name</label>
-                    <input
-                      required
-                      type="text"
-                      value={lastName}
-                      onChange={e => setLastName(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-gray-800 border border-white/10 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
-                    />
+                    <label className="mp-label">ФАМИЛИЯ</label>
+                    <input required value={lastName} onChange={e => setLastName(e.target.value)} className="mp-input h-12" placeholder="напр. Иванов" />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-6 mb-6">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-gray-400">Date of Birth</label>
-                    <input
-                      required
-                      type="date"
-                      value={dob}
-                      onChange={e => setDob(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-gray-800 border border-white/10 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50 [color-scheme:dark]"
-                    />
+                    <label className="mp-label">ДАТА НА РАЖДАНЕ</label>
+                    <input required type="date" value={dob} onChange={e => setDob(e.target.value)} className="mp-input h-12" />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-gray-400">Gender</label>
-                    <select
-                      required
-                      value={gender}
-                      onChange={e => setGender(e.target.value as any)}
-                      className="w-full px-3 py-2 rounded-xl bg-gray-800 border border-white/10 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50 appearance-none"
-                    >
-                      <option value="male">Male</option>
-                      <option value="female">Female</option>
-                      <option value="other">Other</option>
+                    <label className="mp-label">ПОЛ</label>
+                    <select required value={gender} onChange={e => setGender(e.target.value as any)} className="mp-input h-12">
+                      <option value="male">Мъж</option>
+                      <option value="female">Жена</option>
+                      <option value="other">Друг</option>
                     </select>
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-gray-400">Email Address (Optional)</label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-gray-800 border border-white/10 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
-                  />
+                <div className="space-y-1.5 mb-6">
+                  <label className="mp-label">ИМЕЙЛ (ПО ИЗБОР)</label>
+                  <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="mp-input h-12" placeholder="example@mail.com" />
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-gray-400">Phone Number (Optional)</label>
-                  <input
-                    type="tel"
-                    value={phone}
-                    onChange={e => setPhone(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl bg-gray-800 border border-white/10 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
-                  />
+                <div className="space-y-1.5 mb-8">
+                  <label className="mp-label">ТЕЛЕФОН (ПО ИЗБОР)</label>
+                  <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} className="mp-input h-12" placeholder="+359..." />
                 </div>
-              </div>
 
-              <div className="mt-8 flex gap-3">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-sm font-medium text-gray-300 transition-colors border border-white/10"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 text-white text-sm font-medium transition-all shadow-lg shadow-violet-500/25 disabled:opacity-50"
-                >
-                  {isSubmitting ? 'Saving...' : 'Save Patient'}
-                </button>
-              </div>
-            </form>
+                <div className="flex gap-4">
+                  <button type="button" onClick={closeModal} className="mp-btn-ghost flex-1 h-12">ОТКАЗ</button>
+                  <button type="submit" disabled={isSubmitting} className="mp-btn-primary flex-1 h-12">
+                    {isSubmitting ? 'ЗАПИС...' : 'ЗАПАЗИ'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </main>
     </div>
   )
 }

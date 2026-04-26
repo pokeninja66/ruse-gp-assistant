@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, useNavigate, Link } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import * as React from 'react'
 import { useAudioRecorder } from '../../hooks/useAudioRecorder'
@@ -20,14 +20,12 @@ import { createAppointmentFn } from '../../utils/appointments'
 import { transcribeAudioFn, analyzeConsultationFn, retryAnalysisFn } from '../../utils/ai'
 import { RecordingCard } from '../../components/RecordingCard'
 import { blobToBase64, formatDuration } from '../../utils/audio'
+import { AppSidebar } from '../../components/AppSidebar'
+import { logoutFn } from '../logout'
 
 export const Route = createFileRoute('/_authed/recordings')({
   component: RecordingsPage,
 })
-
-// Removed local RecordingCard and helpers in favor of src/components/RecordingCard.tsx
-
-// ── Recorder widget ───────────────────────────────────────────────────────────
 
 function RecorderWidget({
   patients,
@@ -38,6 +36,7 @@ function RecorderWidget({
 }) {
   const { status, durationSeconds, audioBlob, audioUrl, start, stop, pause, resume, reset, error } =
     useAudioRecorder()
+  // navigate removed — we stay on this page after save
   const doUpload = useServerFn(uploadRecordingFn)
   const doCreateAppointment = useServerFn(createAppointmentFn)
   const doTranscribe = useServerFn(transcribeAudioFn)
@@ -53,20 +52,23 @@ function RecorderWidget({
   const isPaused = status === 'paused'
   const isDone = status === 'stopped'
 
+  const [savedSessionId, setSavedSessionId] = React.useState<string | null>(null)
+
   const handleSave = async () => {
     if (!audioBlob) return
     setSaving(true)
     setSaveError(null)
-    const name = recordingName.trim() || `Recording ${new Date().toLocaleString()}`
+    setSavedSessionId(null)
+    const name = recordingName.trim() || `Запис ${new Date().toLocaleString('bg-BG')}`
 
     try {
-      setProcessingState('Uploading...')
+      setProcessingState('Качване...')
       const base64 = await blobToBase64(audioBlob)
       
       let appointmentId: string | undefined = undefined
 
       if (selectedPatientId) {
-        setProcessingState('Creating Session...')
+        setProcessingState('Създаване на сесия...')
         const aptRes = await doCreateAppointment({ data: { patientId: selectedPatientId } })
         if (aptRes.error) throw new Error(aptRes.message)
         appointmentId = aptRes.appointmentId
@@ -79,14 +81,15 @@ function RecorderWidget({
           name,
           duration: durationSeconds,
           size: audioBlob.size,
-          appointmentId
+          appointmentId,
+          patientId: selectedPatientId
         },
       })
 
       if (result.error) {
         console.error('[recordings] Upload failed:', result.message)
         await saveLocalRecording(audioBlob, name, durationSeconds)
-        setSaveError(`Saved locally (cloud error: ${result.message})`)
+        setSaveError(`Запазено локално (грешка: ${result.message})`)
         setSaving(false)
         setProcessingState(null)
         onSaved()
@@ -95,12 +98,12 @@ function RecorderWidget({
 
       // If a patient is selected, run the AI pipeline
       if (appointmentId && selectedPatientId) {
-        setProcessingState('Transcribing Audio...')
+        setProcessingState('Транскрибиране...')
         const transRes = await doTranscribe({
           data: { base64, mimeType: audioBlob.type }
         })
         if (!transRes.error && transRes.transcript) {
-          setProcessingState('AI Analyzing...')
+          setProcessingState('Анализ...')
           await doAnalyze({
             data: {
               appointmentId,
@@ -109,6 +112,8 @@ function RecorderWidget({
             }
           })
         }
+        // Store the session ID so user can navigate manually
+        setSavedSessionId(appointmentId)
       }
 
     } catch (err) {
@@ -116,9 +121,9 @@ function RecorderWidget({
       console.error('[recordings] Unexpected error:', err)
       try {
         await saveLocalRecording(audioBlob, name, durationSeconds)
-        setSaveError(`Saved locally (error: ${msg})`)
+        setSaveError(`Запазено локално (грешка: ${msg})`)
       } catch {
-        setSaveError(`Could not save recording: ${msg}`)
+        setSaveError(`Грешка при записване: ${msg}`)
       }
       setSaving(false)
       setProcessingState(null)
@@ -135,200 +140,209 @@ function RecorderWidget({
   }
 
   return (
-    <div className="mb-8 p-6 rounded-2xl bg-white/4 border border-white/8">
+    <div className="mp-card p-8 mb-8 text-center flex flex-col items-center">
       {/* Mic / stop button */}
       <div className="flex flex-col items-center gap-4">
         <div className="relative">
           {isRecording && (
             <>
-              <span className="absolute inset-0 rounded-full bg-red-500/30 animate-ping" />
-              <span className="absolute inset-[-8px] rounded-full bg-red-500/10 animate-pulse" />
+              <span className="absolute inset-0 rounded-full animate-ping" style={{ background: 'hsl(0 70% 45% / 0.2)' }} />
+              <span className="absolute -inset-3 rounded-full animate-pulse" style={{ background: 'hsl(0 70% 45% / 0.08)' }} />
             </>
           )}
           <button
-            id="record-btn"
-            onClick={async () => {
-              if (isDone) return
-              if (!isRecording && !isPaused) await start()
-              else if (isRecording) pause()
-              else if (isPaused) resume()
+            type="button"
+            onClick={isRecording ? stop : start}
+            disabled={saving || processingState !== null}
+            style={{
+              position: 'relative',
+              width: 110,
+              height: 110,
+              borderRadius: '2rem',
+              border: '1.5px solid rgba(255,255,255,0.2)',
+              cursor: 'pointer',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 4,
+              transition: 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+              ...(isRecording
+                ? {
+                    background: 'linear-gradient(135deg, hsl(0 70% 45%), hsl(0 70% 35%))',
+                    color: '#fff',
+                    boxShadow: '0 20px 40px -10px hsl(0 70% 45% / 0.4), inset 0 0 20px rgba(0,0,0,0.1)',
+                    transform: 'scale(1.05)',
+                  }
+                : {
+                    background: 'linear-gradient(135deg, hsl(142 72% 26%), hsl(142 72% 20%))',
+                    color: '#fff',
+                    boxShadow: '0 20px 40px -10px hsl(142 72% 26% / 0.4), inset 0 0 20px rgba(0,0,0,0.1)',
+                  }),
+              ...(saving || processingState ? { opacity: 0.5, cursor: 'not-allowed', filter: 'grayscale(0.5)' } : {}),
             }}
-            disabled={isDone || saving}
-            className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 shadow-2xl active:scale-95 disabled:opacity-50 ${
-              isRecording
-                ? 'bg-red-500 hover:bg-red-400 shadow-red-500/40'
-                : isPaused
-                ? 'bg-amber-500 hover:bg-amber-400 shadow-amber-500/40'
-                : 'bg-gradient-to-br from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 shadow-violet-500/30'
-            }`}
           >
             {isRecording ? (
-              // Pause icon
-              <svg className="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-              </svg>
-            ) : isPaused ? (
-              // Resume icon
-              <svg className="w-7 h-7 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M8 5v14l11-7L8 5z" />
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="6" width="12" height="12" rx="2" />
               </svg>
             ) : (
-              // Mic icon
-              <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
               </svg>
             )}
+            <span style={{ fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.06em' }}>
+              {isRecording ? 'СТОП' : 'ЗАПИС'}
+            </span>
           </button>
         </div>
+        
+        {isRecording && (
+          <span className="animate-pulse" style={{ fontSize: '0.75rem', fontWeight: 600, color: 'hsl(0 70% 45%)' }}>
+            Слушам… ({durationSeconds}с)
+          </span>
+        )}
 
-        {/* Status line */}
-        {(isRecording || isPaused) && (
-          <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${isRecording ? 'bg-red-400 animate-pulse' : 'bg-amber-400'}`} />
-            <span className="text-sm font-mono tabular-nums text-gray-300">
-              {formatDuration(durationSeconds)}
-            </span>
-            <span className="text-sm text-gray-500">
-              {isRecording ? 'Recording…' : 'Paused'}
-            </span>
+        <div style={{ fontSize: '1.5rem', fontWeight: 700, fontFamily: 'monospace', color: 'hsl(214 55% 12%)', letterSpacing: '0.05em' }}>
+          {formatDuration(durationSeconds)}
+        </div>
+
+        {!isRecording && !isPaused && !isDone && !processingState && (
+          <p style={{ fontSize: '0.8125rem', color: 'hsl(214 20% 42%)', margin: 0 }}>
+            Натиснете бутона за да започнете запис
+          </p>
+        )}
+        
+        {isRecording && (
+          <div className="flex gap-4 mt-1">
+            <button onClick={pause} className="mp-btn-outline" style={{ height: 40, padding: '0 1.5rem', fontSize: '0.875rem', borderRadius: '2rem' }}>Пауза</button>
           </div>
         )}
-
-        {!isRecording && !isPaused && !isDone && (
-          <p className="text-sm text-gray-500">Tap to start recording</p>
-        )}
-
-        {error && (
-          <p className="text-sm text-red-400">{error}</p>
-        )}
-
-        {/* Stop + Save controls */}
-        {(isRecording || isPaused || isDone) && (
-          <div className="w-full flex flex-col gap-3 mt-2">
-            {/* Stop button (only while recording/paused) */}
-            {!isDone && (
-              <button
-                onClick={stop}
-                className="w-full py-2 rounded-xl bg-white/8 hover:bg-white/12 text-sm text-gray-300 border border-white/10 transition-all"
-              >
-                Stop recording
-              </button>
-            )}
-
-            {/* Save flow */}
-            {isDone && (
-              <>
-                {/* Preview */}
-                {audioUrl && (
-                  <audio controls src={audioUrl} className="w-full h-9 rounded-lg" />
-                )}
-                <div className="flex flex-col gap-2">
-                  <input
-                    type="text"
-                    placeholder="Name this recording…"
-                    value={recordingName}
-                    onChange={(e) => setRecordingName(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-gray-800 border border-white/10 text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/60 transition"
-                  />
-                  <select
-                    value={selectedPatientId}
-                    onChange={(e) => setSelectedPatientId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-gray-800 border border-white/10 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/60 transition appearance-none"
-                  >
-                    <option value="">Unassigned Recording (Standalone)</option>
-                    {patients.map(p => (
-                      <option key={p.id} value={p.id}>{p.first_name} {p.last_name}</option>
-                    ))}
-                  </select>
-                </div>
-                {saveError && <p className="text-sm text-red-400">{saveError}</p>}
-                <div className="flex gap-2">
-                  <button
-                    onClick={reset}
-                    className="flex-1 py-2 rounded-xl bg-white/6 hover:bg-white/10 text-sm text-gray-400 border border-white/10 transition-all"
-                  >
-                    Discard
-                  </button>
-                  <button
-                    id="save-recording-btn"
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="flex-1 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 text-white text-sm font-medium transition-all shadow-lg shadow-violet-500/20 disabled:opacity-50"
-                  >
-                    {saving ? (processingState || 'Saving…') : (selectedPatientId ? 'Save & Analyze' : 'Save')}
-                  </button>
-                </div>
-              </>
-            )}
+        {isPaused && (
+          <div className="flex gap-4 mt-1">
+            <button onClick={resume} className="mp-btn-primary" style={{ height: 40, padding: '0 1.5rem', fontSize: '0.875rem', borderRadius: '2rem' }}>Продължи</button>
+            <button onClick={stop} className="mp-btn-outline" style={{ height: 40, padding: '0 1.5rem', fontSize: '0.875rem', borderRadius: '2rem', borderColor: 'hsl(0 70% 45%)', color: 'hsl(0 70% 45%)' }}>Край</button>
           </div>
         )}
       </div>
+
+      {error && <div className="mt-4 text-sm text-mp-danger font-medium">{error}</div>}
+      {saveError && <div className="mt-4 text-sm text-mp-danger font-medium">{saveError}</div>}
+      {processingState && <div className="mt-4 text-sm text-mp-green-dark font-bold animate-pulse">{processingState}</div>}
+
+      {/* Success banner after save */}
+      {savedSessionId && !isDone && (
+        <div className="mt-6 w-full max-w-md mx-auto p-5 rounded-2xl bg-mp-green-light border border-mp-green/20">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-8 h-8 rounded-full bg-mp-green flex items-center justify-center text-white">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3}><path d="M20 6L9 17l-5-5"/></svg>
+            </div>
+            <p className="text-sm font-bold text-mp-green-dark">Записът е запазен успешно!</p>
+          </div>
+          <Link
+            to="/session/$appointmentId/results"
+            params={{ appointmentId: savedSessionId }}
+            className="mp-btn-primary h-10 px-6 text-sm inline-flex items-center gap-2 text-decoration-none"
+          >
+            Виж анализа и обобщението →
+          </Link>
+        </div>
+      )}
+
+      {isDone && !saving && !processingState && (
+        <div className="mt-8 w-full max-w-md mx-auto text-left flex flex-col gap-5">
+          {audioUrl && (
+            <div className="p-4 bg-mp-bg rounded-2xl border border-mp-border">
+              <audio src={audioUrl} controls className="w-full" />
+            </div>
+          )}
+
+          <div>
+            <label className="mp-label mb-2 block">ИМЕ НА ЗАПИСА</label>
+            <input
+              className="mp-input w-full h-12"
+              value={recordingName}
+              onChange={(e) => setRecordingName(e.target.value)}
+              placeholder="напр. Консултация с Иван..."
+            />
+          </div>
+
+          <div>
+            <label className="mp-label mb-2 block">СВЪРЖИ С ПАЦИЕНТ (ОПЦИОНАЛНО)</label>
+            <select
+              className="mp-input w-full h-12"
+              value={selectedPatientId}
+              onChange={(e) => setSelectedPatientId(e.target.value)}
+            >
+              <option value="">Без пациент</option>
+              {patients.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.first_name} {p.last_name}
+                </option>
+              ))}
+            </select>
+            {selectedPatientId && (
+              <p className="mt-2 text-xs text-mp-text-muted italic">Избирането на пациент автоматично ще създаде преглед и ще стартира AI анализ.</p>
+            )}
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button onClick={handleSave} className="mp-btn-primary flex-1 h-12">
+              ЗАПАЗИ
+            </button>
+            <button onClick={() => { reset(); setSavedSessionId(null) }} className="mp-btn-outline h-12 px-6">
+              ИЗТРИЙ
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────────
-
 function RecordingsPage() {
-  const navigate = useNavigate()
   const { user } = Route.useRouteContext()
-  const doList = useServerFn(listRecordingsFn)
+  const doLogout = useServerFn(logoutFn)
+  const doListRecs = useServerFn(listRecordingsFn)
+  const doDeleteRec = useServerFn(deleteRecordingFn)
   const doListPatients = useServerFn(listPatientsFn)
-  const doDelete = useServerFn(deleteRecordingFn)
   const doRetry = useServerFn(retryAnalysisFn)
+  const navigate = useNavigate()
 
-  const [cloudRecs, setCloudRecs] = React.useState<RecordingMeta[]>([])
-  const [localRecs, setLocalRecs] = React.useState<LocalRecording[]>([])
-  const [localUrls, setLocalUrls] = React.useState<Record<string, string>>({})
+  const [cloudRecordings, setCloudRecordings] = React.useState<RecordingMeta[]>([])
+  const [localRecordings, setLocalRecordings] = React.useState<LocalRecording[]>([])
   const [patients, setPatients] = React.useState<Patient[]>([])
   const [loading, setLoading] = React.useState(true)
   const [retryingId, setRetryingId] = React.useState<string | null>(null)
 
   const loadAll = React.useCallback(async () => {
     setLoading(true)
-    const [cloud, local, pats] = await Promise.all([
-      doList().catch(() => [] as RecordingMeta[]),
-      listLocalRecordings().catch(() => [] as LocalRecording[]),
-      doListPatients().catch(() => [] as Patient[]),
+    const [cRes, lRes, pRes] = await Promise.all([
+      doListRecs().catch(() => [] as RecordingMeta[]),
+      listLocalRecordings(),
+      doListPatients().catch(() => [] as Patient[])
     ])
-    setCloudRecs(cloud)
-    setLocalRecs(local)
-    setPatients(pats)
-
-    // Create object URLs for local blobs
-    const urls: Record<string, string> = {}
-    local.forEach((r) => {
-      urls[r.id] = getLocalObjectUrl(r)
-    })
-    setLocalUrls(urls)
+    setCloudRecordings(Array.isArray(cRes) ? cRes : [])
+    setLocalRecordings(lRes)
+    setPatients(Array.isArray(pRes) ? pRes : [])
     setLoading(false)
-  }, [doList, doListPatients])
+  }, [doListRecs, doListPatients])
 
   React.useEffect(() => {
     loadAll()
-    return () => {
-      // Clean up object URLs
-      Object.values(localUrls).forEach((u) => URL.revokeObjectURL(u))
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [loadAll])
 
   const handleDeleteCloud = async (id: string, storagePath?: string) => {
-    if (!window.confirm('Are you sure you want to delete this cloud recording?')) return
-    await doDelete({ data: { id, storagePath } })
-    setCloudRecs((prev) => prev.filter((r) => r.id !== id))
+    if (!window.confirm('Изтриване на записа?')) return
+    const res = await doDeleteRec({ data: { id, storagePath } })
+    if (res.error) alert(res.message)
+    else loadAll()
   }
 
   const handleDeleteLocal = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this local recording? It will be gone forever.')) return
-    if (localUrls[id]) URL.revokeObjectURL(localUrls[id])
+    if (!window.confirm('Изтриване на локалния запис?')) return
     await deleteLocalRecording(id)
-    setLocalRecs((prev) => prev.filter((r) => r.id !== id))
-    setLocalUrls((prev) => {
-      const next = { ...prev }
-      delete next[id]
-      return next
-    })
+    loadAll()
   }
 
   const handleRetry = async (recordingId: string, appointmentId: string) => {
@@ -336,100 +350,101 @@ function RecordingsPage() {
     try {
       const res = await doRetry({ data: { appointmentId } })
       if (res.error) {
-        alert(`Analysis failed: ${res.message}`)
-      } else {
-        navigate({ to: '/session/results/$appointmentId', params: { appointmentId } })
+        alert(`Анализът не бе успешен: ${res.message}`)
       }
     } catch (err: any) {
-      alert(`Error: ${err.message}`)
+      alert(`Грешка: ${err.message}`)
     } finally {
       setRetryingId(null)
       loadAll()
     }
   }
 
-  const totalCount = cloudRecs.length + localRecs.length
-
   return (
-    <div className="min-h-[calc(100dvh-3.5rem)] bg-gray-950">
-      {/* Ambient */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden -z-0">
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-violet-600/8 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 right-0 w-96 h-96 bg-cyan-600/6 rounded-full blur-3xl" />
-      </div>
-
-      <div className="relative z-10 max-w-3xl mx-auto px-4 py-10">
-        {/* Page header */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-white tracking-tight">Recordings</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {user?.email} · {totalCount} recording{totalCount !== 1 ? 's' : ''}
-          </p>
-        </div>
-
-        {/* Recorder */}
-        <RecorderWidget patients={patients} onSaved={loadAll} />
-
-        {/* List */}
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-              Saved recordings
-            </h2>
-            <span className="text-xs text-gray-600">{totalCount} total</span>
+    <div className="mp-layout">
+      <AppSidebar user={user} onLogout={() => doLogout().then(() => navigate({ to: '/login' }))} />
+      <main className="mp-main">
+        <div style={{ maxWidth: 900, margin: '0 auto' }}>
+          
+          <div className="mb-8">
+            <h1 className="text-4xl font-extrabold text-mp-text tracking-tight">Гласови записи</h1>
+            <p className="text-mp-text-muted mt-2 text-lg">Записвайте консултации директно или преглеждайте предишни записи.</p>
           </div>
 
+          <RecorderWidget patients={patients} onSaved={loadAll} />
+
           {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <svg className="animate-spin w-6 h-6 text-violet-400" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-              </svg>
-            </div>
-          ) : totalCount === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="w-14 h-14 rounded-2xl bg-white/4 border border-white/8 flex items-center justify-center mb-4">
-                <svg className="w-6 h-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
-                </svg>
-              </div>
-              <p className="text-gray-500 text-sm">No recordings yet</p>
-              <p className="text-gray-600 text-xs mt-1">Tap the mic above to get started</p>
+            <div className="flex justify-center items-center py-20">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-mp-green"></div>
             </div>
           ) : (
-            <div className="flex flex-col gap-2">
-              {cloudRecs.map((rec) => (
-                <RecordingCard
-                  key={rec.id}
-                  name={rec.name}
-                  duration={rec.duration}
-                  size={rec.size}
-                  createdAt={rec.created_at}
-                  localOnly={false}
-                  publicUrl={rec.publicUrl}
-                  appointmentId={rec.appointment_id}
-                  patientName={rec.patient_name}
-                  isAnalyzing={retryingId === rec.id}
-                  onDelete={() => handleDeleteCloud(rec.id, rec.storage_path)}
-                  onRetry={rec.appointment_id ? () => handleRetry(rec.id, rec.appointment_id!) : undefined}
-                />
-              ))}
-              {localRecs.map((rec) => (
-                <RecordingCard
-                  key={rec.id}
-                  name={rec.name}
-                  duration={rec.duration}
-                  size={rec.size}
-                  createdAt={rec.createdAt}
-                  localOnly
-                  audioUrl={localUrls[rec.id]}
-                  onDelete={() => handleDeleteLocal(rec.id)}
-                />
-              ))}
+            <div className="space-y-12">
+              
+              {/* Cloud Recordings */}
+              <div>
+                <h2 className="text-xl font-bold text-mp-text mb-6 flex items-center gap-2">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-mp-green"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                  Облачни записи
+                </h2>
+                {cloudRecordings.length === 0 ? (
+                  <div className="mp-card p-12 text-center border-dashed">
+                    <p className="text-mp-text-subtle font-medium text-sm">Няма запазени облачни записи.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {cloudRecordings.map(rec => (
+                      <RecordingCard
+                        key={rec.id}
+                        recording={rec}
+                        onDelete={() => handleDeleteCloud(rec.id, rec.storage_path)}
+                        onRetryAnalysis={handleRetry}
+                        isRetrying={retryingId === rec.id}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Local Recordings */}
+              {localRecordings.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-3 mb-6">
+                    <h2 className="text-xl font-bold text-mp-text flex items-center gap-2">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-mp-warn"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                      Локални записи
+                    </h2>
+                    <span className="bg-mp-warn-bg text-mp-warn-dark text-[10px] font-extrabold px-2 py-0.5 rounded uppercase tracking-widest">Офлайн</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {localRecordings.map(lRec => (
+                      <div key={lRec.id} className="mp-card p-6 border-mp-warn/20 bg-mp-warn-bg/30">
+                        <div className="flex items-start justify-between mb-4">
+                          <div>
+                            <h3 className="font-bold text-mp-text">{lRec.name}</h3>
+                            <p className="text-[11px] text-mp-text-subtle mt-1">{new Date(lRec.createdAt).toLocaleString('bg-BG')}</p>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteLocal(lRec.id)}
+                            className="text-mp-text-subtle hover:text-mp-danger transition-colors"
+                          >
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                          </button>
+                        </div>
+                        <div className="bg-white/50 p-3 rounded-xl">
+                          <audio src={getLocalObjectUrl(lRec)} controls className="w-full h-8" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
             </div>
           )}
+
         </div>
-      </div>
+        <div className="h-20" />
+      </main>
     </div>
   )
 }
