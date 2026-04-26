@@ -315,7 +315,7 @@ function AnamnesisPage() {
               gap: '0.75rem',
               border: '1px solid rgba(255,255,255,0.1)'
             }}>
-              <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyCenter: 'center' }}>
+              <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3}><path d="M20 6L9 17l-5-5"/></svg>
               </div>
               <span style={{ fontSize: '0.875rem', fontWeight: 700, letterSpacing: '0.01em' }}>{saveMsg}</span>
@@ -467,7 +467,7 @@ function AnamnesisPage() {
 
           {/* Bottom actions */}
           <div style={{ marginTop: '2.5rem', paddingTop: '1.5rem', borderTop: '1px solid hsl(var(--mp-border))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
-            <Link to={`/patients/${patientId}`} className="mp-btn-ghost" style={{ height: 52, padding: '0 1.25rem', fontSize: '0.875rem', display: 'inline-flex', alignItems: 'center', textDecoration: 'none' }}>
+            <Link to="/patients/$patientId" params={{ patientId: patientId || '' }} className="mp-btn-ghost" style={{ height: 52, padding: '0 1.25rem', fontSize: '0.875rem', display: 'inline-flex', alignItems: 'center', textDecoration: 'none' }}>
               ← Назад към профил
             </Link>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
@@ -482,7 +482,7 @@ function AnamnesisPage() {
               <button
                 type="button"
                 className="mp-btn-primary"
-                onClick={async () => { await handleSave(); navigate({ to: `/session/${appointmentId}/status` }) }}
+                onClick={async () => { await handleSave(); navigate({ to: '/session/$appointmentId/status', params: { appointmentId } }) }}
                 style={{ height: 52, padding: '0 1.5rem', fontSize: '0.875rem', display: 'inline-flex', alignItems: 'center' }}
               >
                 ПРОДЪЛЖИ КЪМ СТАТУС →

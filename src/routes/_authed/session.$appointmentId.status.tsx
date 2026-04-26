@@ -351,7 +351,8 @@ function StatusPage() {
           {/* Bottom actions */}
           <div className="mt-12 pt-8 border-t border-mp-border flex items-center justify-between flex-wrap gap-4">
             <Link 
-              to={`/session/${appointmentId}/anamnesis`} 
+              to="/session/$appointmentId/anamnesis" 
+              params={{ appointmentId }}
               className="mp-btn-ghost h-14 px-8 text-decoration-none inline-flex items-center"
             >
               ← НАЗАД КЪМ АНАМНЕЗА
@@ -369,7 +370,7 @@ function StatusPage() {
               <button
                 type="button"
                 className="mp-btn-primary h-14 px-10 shadow-lg shadow-mp-green/20"
-                onClick={async () => { await handleSave(); navigate({ to: `/session/${appointmentId}/diagnosis` }) }}
+                onClick={async () => { await handleSave(); navigate({ to: '/session/$appointmentId/diagnosis', params: { appointmentId } }) }}
               >
                 ПРОДЪЛЖИ КЪМ ДИАГНОЗА →
               </button>

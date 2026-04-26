@@ -261,11 +261,11 @@ function ReferralPage() {
           </div>
 
           <div className="mt-12 pt-8 border-t border-mp-border flex items-center justify-between flex-wrap gap-4">
-            <Link to={`/session/${appointmentId}/therapy`} className="mp-btn-ghost h-14 px-8 text-decoration-none inline-flex items-center">
+            <Link to="/session/$appointmentId/therapy" params={{ appointmentId }} className="mp-btn-ghost h-14 px-8 text-decoration-none inline-flex items-center">
               ← НАЗАД КЪМ ТЕРАПИЯ
             </Link>
             <button 
-              onClick={() => navigate({ to: `/session/${appointmentId}/test-orders` })}
+              onClick={() => navigate({ to: '/session/$appointmentId/test-orders', params: { appointmentId } })}
               className="mp-btn-primary h-14 px-12 text-decoration-none inline-flex items-center shadow-lg shadow-mp-green/20"
             >
               ПРОДЪЛЖИ КЪМ ИЗСЛЕДВАНИЯ →

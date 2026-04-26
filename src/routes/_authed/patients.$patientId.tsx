@@ -508,7 +508,7 @@ function PatientDetailPage() {
                   <div className="p-4 rounded-xl bg-mp-green-light border border-mp-green/20 animate-in slide-in-from-top-2 duration-200">
                     <p className="text-xs font-bold text-mp-green-dark uppercase mb-1">ИЗБРАНО ЛЕКАРСТВО</p>
                     <p className="text-lg font-bold text-mp-text leading-tight">{selectedDrug.product_name}</p>
-                    <p className="text-sm text-mp-text-muted mt-1">{selectedDrug.pharmaceutical_form}</p>
+                    <p className="text-sm text-mp-text-muted mt-1">{selectedDrug.dosage_form}</p>
                   </div>
                 )}
 

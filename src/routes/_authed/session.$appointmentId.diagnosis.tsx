@@ -173,7 +173,7 @@ function DiagnosisPage() {
         }
       })
     }
-    navigate({ to: `/session/${appointmentId}/therapy` })
+    navigate({ to: '/session/$appointmentId/therapy', params: { appointmentId } })
   }
 
   const handleRerun = async () => {
@@ -243,7 +243,7 @@ function DiagnosisPage() {
               gap: '0.75rem',
               border: '1px solid rgba(255,255,255,0.1)'
             }}>
-              <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyCenter: 'center' }}>
+              <div style={{ width: 20, height: 20, borderRadius: '50%', background: 'rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3}><path d="M20 6L9 17l-5-5"/></svg>
               </div>
               <span style={{ fontSize: '0.875rem', fontWeight: 700, letterSpacing: '0.01em' }}>{saveMsg}</span>
@@ -391,7 +391,7 @@ function DiagnosisPage() {
           </div>
 
           <div className="mt-12 pt-8 border-t border-mp-border flex items-center justify-between flex-wrap gap-4">
-            <Link to={`/session/${appointmentId}/status`} className="mp-btn-ghost h-14 px-8 text-decoration-none inline-flex items-center">
+            <Link to="/session/$appointmentId/status" params={{ appointmentId }} className="mp-btn-ghost h-14 px-8 text-decoration-none inline-flex items-center">
               ← НАЗАД КЪМ ПРЕГЛЕД
             </Link>
             <div className="flex items-center gap-4">

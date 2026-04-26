@@ -266,13 +266,13 @@ function TestOrdersPage() {
           </div>
 
           <div className="mt-12 pt-8 border-t border-mp-border flex items-center justify-between flex-wrap gap-4">
-            <Link to={`/session/${appointmentId}/referral`} className="mp-btn-ghost h-14 px-8 text-decoration-none inline-flex items-center">
+            <Link to="/session/$appointmentId/referral" params={{ appointmentId }} className="mp-btn-ghost h-14 px-8 text-decoration-none inline-flex items-center">
               ← НАЗАД КЪМ НАПРАВЛЕНИЯ
             </Link>
             <div className="flex items-center gap-4">
               {saveMsg && <span className="text-sm font-bold text-mp-green-dark">{saveMsg}</span>}
               <button 
-                onClick={() => navigate({ to: `/session/${appointmentId}/documents` })}
+                onClick={() => navigate({ to: '/session/$appointmentId/documents', params: { appointmentId } })}
                 className="mp-btn-primary h-14 px-12 text-decoration-none inline-flex items-center shadow-lg shadow-mp-green/20"
               >
                 ПРОДЪЛЖИ КЪМ ДОКУМЕНТИ →

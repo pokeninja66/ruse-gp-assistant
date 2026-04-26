@@ -144,10 +144,10 @@ function ResultsPage() {
             <div className="mp-card p-8 bg-mp-bg/50 border-dashed">
               <h2 className="text-xl font-bold text-mp-text mb-4">Следващи стъпки</h2>
               <div className="flex flex-col gap-3">
-                <Link to={`/session/${appointmentId}/anamnesis`} className="mp-btn-primary h-14 text-decoration-none inline-flex items-center justify-center gap-2">
+                <Link to="/session/$appointmentId/anamnesis" params={{ appointmentId }} className="mp-btn-primary h-14 text-decoration-none inline-flex items-center justify-center gap-2">
                   КЪМ РАБОТЕН ЛИСТ →
                 </Link>
-                <Link to={`/patients/${patientId}`} className="mp-btn-ghost h-12 text-decoration-none inline-flex items-center justify-center">
+                 <Link to="/patients/$patientId" params={{ patientId: patientId || '' }} className="mp-btn-ghost h-12 text-decoration-none inline-flex items-center justify-center">
                   ЗАВЪРШИ ПРЕГЛЕДА
                 </Link>
               </div>

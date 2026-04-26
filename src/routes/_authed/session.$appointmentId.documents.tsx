@@ -128,7 +128,8 @@ function DocumentsPage() {
 
           <div className="mt-12 pt-8 border-t border-mp-border flex items-center justify-between flex-wrap gap-4">
             <Link 
-              to={`/session/${appointmentId}/results`} 
+              to="/session/$appointmentId/results" 
+              params={{ appointmentId }}
               className="mp-btn-ghost h-14 px-8 text-decoration-none inline-flex items-center"
             >
               ← НАЗАД КЪМ РЕЗУЛТАТИ
