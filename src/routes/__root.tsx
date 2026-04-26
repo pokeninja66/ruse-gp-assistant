@@ -51,10 +51,8 @@ export const Route = createRootRoute({
         href: 'https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;1,14..32,400&display=swap',
       },
       { rel: 'apple-touch-icon', sizes: '180x180', href: '/apple-touch-icon.png' },
-      { rel: 'icon', type: 'image/png', sizes: '32x32', href: '/favicon-32x32.png' },
-      { rel: 'icon', type: 'image/png', sizes: '16x16', href: '/favicon-16x16.png' },
+      { rel: 'icon', type: 'image/png', href: '/favicon.png' },
       { rel: 'manifest', href: '/site.webmanifest' },
-      { rel: 'icon', href: '/favicon.ico' },
     ],
   }),
   errorComponent: (props) => (

@@ -173,7 +173,7 @@ export function AppSidebar({ user, appointmentId, patientId, patientName, onLogo
       {/* Mobile Top Bar */}
       <div className="md:hidden flex items-center justify-between p-4 bg-mp-sidebar border-b border-mp-border fixed top-0 left-0 right-0 z-[60] h-16">
         <Link to="/" className="flex items-center gap-2 text-decoration-none">
-          <img src="/src/styles/images/logo.png" alt="Logo" className="w-8 h-8 object-contain" />
+          <img src="/favicon.png" alt="Logo" className="w-8 h-8 object-contain" />
           <span style={{ fontSize: '1.125rem', fontStyle: 'italic', fontWeight: 800, color: 'hsl(var(--mp-green))' }}>
             GP Assistant
           </span>
@@ -208,7 +208,7 @@ export function AppSidebar({ user, appointmentId, patientId, patientName, onLogo
               display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
             }}>
               <img 
-                src="/src/styles/images/logo.png" 
+                src="/favicon.png" 
                 alt="Logo" 
                 style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
               />
