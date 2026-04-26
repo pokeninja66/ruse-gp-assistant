@@ -7,14 +7,21 @@ import OpenAI from 'openai'
 function getOpenAIClient() {
   // Use process.env for server-side secrets. 
   // Avoid import.meta.env.VITE_* as it may be inlined by the bundler.
+  // Cloudflare Pages/Workers might not have process.env available unless nodejs_compat is on.
   const apiKey = 
     process.env?.OPENAI_API_KEY ||
     process.env?.VITE_OPENAI_API_KEY || 
     // @ts-ignore
-    globalThis?.OPENAI_API_KEY
+    globalThis?.process?.env?.OPENAI_API_KEY ||
+    // @ts-ignore
+    globalThis?.process?.env?.VITE_OPENAI_API_KEY ||
+    // @ts-ignore
+    globalThis?.OPENAI_API_KEY ||
+    // @ts-ignore
+    import.meta.env?.VITE_OPENAI_API_KEY
 
   if (!apiKey) {
-    throw new Error('Missing OpenAI API Key in environment variables (OPENAI_API_KEY)')
+    throw new Error('Missing OpenAI API Key in environment variables. Please set OPENAI_API_KEY in your dashboard.')
   }
   return new OpenAI({ apiKey, dangerouslyAllowBrowser: false })
 }

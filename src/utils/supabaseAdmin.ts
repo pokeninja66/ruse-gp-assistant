@@ -11,13 +11,27 @@ let _adminClient: ReturnType<typeof createClient> | null = null
 export function getSupabaseAdminClient() {
   if (_adminClient) return _adminClient
 
-  const url = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_URL) || process.env.VITE_SUPABASE_URL as string
-  const serviceRoleKey = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_SUPABASE_SERVICE_ROLE_KEY) || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY as string
+  const url = 
+    process.env?.VITE_SUPABASE_URL || 
+    // @ts-ignore
+    globalThis?.process?.env?.VITE_SUPABASE_URL ||
+    // @ts-ignore
+    import.meta.env?.VITE_SUPABASE_URL
+
+  const serviceRoleKey = 
+    process.env?.VITE_SUPABASE_SERVICE_ROLE_KEY || 
+    process.env?.SUPABASE_SERVICE_ROLE_KEY ||
+    // @ts-ignore
+    globalThis?.process?.env?.VITE_SUPABASE_SERVICE_ROLE_KEY ||
+    // @ts-ignore
+    globalThis?.process?.env?.SUPABASE_SERVICE_ROLE_KEY ||
+    // @ts-ignore
+    import.meta.env?.VITE_SUPABASE_SERVICE_ROLE_KEY
 
   if (!url) throw new Error('Missing VITE_SUPABASE_URL')
   if (!serviceRoleKey) {
     throw new Error(
-      'Missing VITE_SUPABASE_SERVICE_ROLE_KEY environment variable',
+      'Missing VITE_SUPABASE_SERVICE_ROLE_KEY environment variable. Please set it in your dashboard.',
     )
   }
 
