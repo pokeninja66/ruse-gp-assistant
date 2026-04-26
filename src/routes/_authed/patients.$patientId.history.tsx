@@ -181,7 +181,7 @@ function HistoryPage() {
             <nav className="flex items-center gap-1.5 text-xs font-medium text-mp-text-muted mb-3">
               <Link to="/patients" className="hover:text-mp-green transition-colors text-decoration-none">Пациенти</Link>
               <span>›</span>
-              <Link to={`/patients/${patientId}`} className="hover:text-mp-green transition-colors text-decoration-none">{patient?.first_name} {patient?.last_name}</Link>
+              <Link to="/patients/$patientId" params={{ patientId }} className="hover:text-mp-green transition-colors text-decoration-none">{patient?.first_name} {patient?.last_name}</Link>
               <span>›</span>
               <span className="text-mp-text font-semibold">История</span>
             </nav>
@@ -211,7 +211,8 @@ function HistoryPage() {
                       <div className="flex items-center gap-4">
                         {item.appointmentId && (
                           <Link 
-                            to={`/session/${item.appointmentId}/anamnesis`} 
+                            to="/session/$appointmentId/anamnesis" 
+                            params={{ appointmentId: item.appointmentId }}
                             className="text-[10px] font-bold text-mp-green hover:underline uppercase tracking-wider"
                           >
                             КЪМ ПРЕГЛЕДА →

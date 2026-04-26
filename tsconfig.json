@@ -1,5 +1,6 @@
 {
-  "include": ["**/*.ts", "**/*.tsx"],
+  "include": ["src/**/*", ".eslintrc.cjs"],
+  "exclude": ["node_modules", "dist", ".output", "scratch"],
   "compilerOptions": {
     "strict": true,
     "esModuleInterop": true,

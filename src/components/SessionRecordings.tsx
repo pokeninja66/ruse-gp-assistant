@@ -6,7 +6,7 @@ import { analyzeRecordingIdFn } from '../utils/ai'
 import { formatDuration, formatSize, timeAgo } from '../utils/audio'
 
 interface SessionRecordingsProps {
-  appointmentId: string
+  appointmentId?: string | null
   patientId?: string | null
   onAnalysisComplete?: (analysis: any) => void
 }
@@ -27,7 +27,7 @@ export function SessionRecordings({ appointmentId, patientId, onAnalysisComplete
       const all = Array.isArray(res) ? res : []
       // Filter to recordings for this appointment OR this patient
       const filtered = all.filter(r => 
-        r.appointment_id === appointmentId ||
+        (appointmentId && r.appointment_id === appointmentId) ||
         (patientId && (r as any).patient_id === patientId)
       )
       setRecordings(filtered)
